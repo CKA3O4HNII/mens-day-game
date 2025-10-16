@@ -78,8 +78,33 @@ class Game{
   entry.addEventListener('pointerdown', (ev)=>{ console.log('pointerdown on entry', idx); ev.preventDefault(); this.startDragPlacement(ev, idx, entry); });
   entry.addEventListener('mousedown', (ev)=>{ console.log('mousedown fallback on entry', idx); ev.preventDefault(); this.startDragPlacement(ev, idx, entry); });
   entry.addEventListener('touchstart', (ev)=>{ console.log('touchstart fallback on entry', idx); ev.preventDefault(); this.startDragPlacement(ev.changedTouches ? ev.changedTouches[0] : ev, idx, entry); }, {passive:false});
+      // HTML5 drag fallback for desktop browsers
+      entry.setAttribute('draggable','true');
+      entry.addEventListener('dragstart', (ev)=>{ console.log('dragstart on entry', idx); try{ ev.dataTransfer.setData('text/plain', 'drag'); ev.dataTransfer.effectAllowed='move'; }catch(e){}; this.startHtmlDrag(ev, idx, entry); });
+      entry.addEventListener('dragend', (ev)=>{ console.log('dragend on entry', idx); this.cleanupHtmlDrag(); });
       listEl.appendChild(entry);
     });
+  }
+
+  startHtmlDrag(ev, idx, entryEl){
+    // ev is DragEvent; use clientX/Y from event or fallback to entry center
+    const clientX = ev.clientX || (entryEl.getBoundingClientRect().left + entryEl.getBoundingClientRect().width/2);
+    const clientY = ev.clientY || (entryEl.getBoundingClientRect().top + entryEl.getBoundingClientRect().height/2);
+    // start the same ghost/placing flow
+    this.startDragPlacement({clientX, clientY, pointerId: ev.pointerId || 0}, idx, entryEl);
+    // attach document dragover/drop to update
+    this._htmlDragOver = (e)=>{ e.preventDefault(); this.updateDrag(e); };
+    this._htmlDrop = (e)=>{ e.preventDefault(); this.endDrag(e); this.cleanupHtmlDrag(); };
+    document.addEventListener('dragover', this._htmlDragOver);
+    document.addEventListener('drop', this._htmlDrop);
+  }
+
+  cleanupHtmlDrag(){
+    if(this._htmlDragOver) { document.removeEventListener('dragover', this._htmlDragOver); this._htmlDragOver=null; }
+    if(this._htmlDrop) { document.removeEventListener('drop', this._htmlDrop); this._htmlDrop=null; }
+    if(this.ghost){ this.ghost.remove(); this.ghost=null; }
+    this.clearPlacementPreview(); this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden');
+    this.renderResources();
   }
 
   startDragPlacement(ev, idx, entryEl){
@@ -148,6 +173,10 @@ class Game{
   document.addEventListener('wheel', (e)=>{e.preventDefault();this.onZoom(e)} ,{passive:false});
   document.addEventListener('keydown',(e)=>this.onKey(e));
   if(this.gridContainer) this.gridContainer.addEventListener('click', (e)=>this.onGridClick(e)); else console.warn('attachEvents: missing gridContainer');
+    if(this.gridContainer){
+      this.gridContainer.addEventListener('dragover', (e)=>{ e.preventDefault(); /* allow drop */ });
+      this.gridContainer.addEventListener('drop', (e)=>{ e.preventDefault(); console.log('drop on gridContainer'); this.endDrag(e); });
+    }
     // update preview on move when user selected a building
     if(this.gridContainer) {
       this.gridContainer.addEventListener('pointermove', (e)=>{ if(this.placingDef) { const pos=this.worldToCell(e.clientX,e.clientY); this.updatePlacementPreview(pos.cx,pos.cy); } });

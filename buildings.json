@@ -1,0 +1,41 @@
+{
+  "buildings": [
+    {
+      "name": "Дом",
+      "cost": {
+        "wood": 20,
+        "stone": 0,
+        "iron": 0
+      },
+      "shape": [0, 1, 3, 4],
+      "bonuses": {
+        "maxPopulation": 5
+      }
+    },
+    {
+      "name": "Академия",
+      "cost": {
+        "wood": 50,
+        "stone": 20,
+        "iron": 10
+      },
+      "shape": [0, 1, 2, 3, 4],
+      "bonuses": {
+        "researchMenu": true
+      }
+    },
+    {
+      "name": "Казарма",
+      "cost": {
+        "wood": 20,
+        "stone": 0,
+        "iron": 10
+      },
+      "shape": [0, 1, 2, 3, 4, 5],
+      "bonuses": {
+        "armyStorage": 20
+      }
+    }
+  ],
+  "units": []
+}

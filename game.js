@@ -1,232 +1,193 @@
-// Основные переменные
+// Константы
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const gridSize = 50;
-const mapWidth = 10; // Город grid 10x10
-const mapHeight = 10;
-const battleGridSize = 30; // Арена 15x15 для боя
-const battleWidth = 15;
-const battleHeight = 15;
+const GRID_SIZE = 10;  // Размер клетки (zoom меняет)
+const WORLD_WIDTH = 100;  // Мир 100x100
+const WORLD_HEIGHT = 100;
+const VIEW_WIDTH = canvas.width / GRID_SIZE;  // Видимые клетки по X
+const VIEW_HEIGHT = canvas.height / GRID_SIZE;
 
-let mode = 'city'; // 'city' или 'battle'
-let population = 100; // Население
-let food = 0; // Еда
-let metal = 0; // Металл
-let level = 1; // Уровень города
-let progress = 0; // Уничтоженные города (0/19)
-let buildings = []; // Здания {type, x, y, workers}
-let units = []; // Юниты в городе/бою
-let enemies = []; // Роботы в бою
-let unlocks = {}; // Чертежи, e.g. {tank: false}
-let timers = []; // Таймеры для смертей/роста
+let cameraX = 0;  // Позиция камеры
+let cameraY = 0;
+let zoom = 1;  // Масштаб (1 = норм)
+let grid = Array.from({length: WORLD_HEIGHT}, () => Array(WORLD_WIDTH).fill(null));  // Grid: null = пусто, объект = здание
+let population = 0;
+let maxPopulation = 100;
+let resources = { wood: 100, stone: 100, iron: 100 };
+let buildingData = {};  // Из JSON
+let armyStorage = [];  // Для казарм (до 20 юнитов)
 
-// Класс Здания
-class Building {
-    constructor(type, x, y) {
-        this.type = type; // 'farm', 'kitchen', etc.
-        this.x = x;
-        this.y = y;
-        this.workers = 0; // Назначенные люди
-    }
-}
-
-// Класс Юнита (для города и боя)
-class Unit {
-    constructor(type, x, y, faction = 'human') {
-        this.type = type; // 'soldier', 'elite', 'tank', etc.
-        this.x = x;
-        this.y = y;
-        this.faction = faction;
-        this.arrivalTurn = 0; // Ходы до прибытия
-        if (faction === 'human') {
-            switch (type) {
-                case 'soldier':
-                    this.move = 2; this.range = 5; this.dmgMin = 0; this.dmgMax = 50; this.hp = Math.floor(Math.random() * 11) + 40; this.cost = 50; this.arrival = 1;
-                    break;
-                case 'elite':
-                    this.move = 3; this.range = 7; this.dmgMin = 20; this.dmgMax = 50; this.hp = 50; this.cost = 50; this.arrival = 3;
-                    break;
-                case 'tank':
-                    this.move = 7; this.range = 15; this.dmgMin = 250; this.dmgMax = 250; this.hp = 1000; this.cost = 500; this.metalCost = 150; this.arrival = 10;
-                    break;
-            }
-        } else { // Роботы
-            switch (type) {
-                case 'robot_soldier':
-                    this.move = 2; this.range = 5; this.dmgMin = 0; this.dmgMax = 50; this.hp = Math.floor(Math.random() * 11) + 40;
-                    break;
-                case 'drone':
-                    this.move = 3; this.range = 7; this.dmgMin = 20; this.dmgMax = 50; this.hp = 50;
-                    break;
-                case 'mech':
-                    this.move = 7; this.range = 15; this.dmgMin = 250; this.dmgMax = 250; this.hp = 1000;
-                    break;
-            }
-        }
-    }
-
-    act(target) {
-        // Атака: если в range
-        if (this.inRange(target)) {
-            const dmg = Math.floor(Math.random() * (this.dmgMax - this.dmgMin + 1)) + this.dmgMin;
-            target.hp -= dmg;
-            if (target.hp <= 0) {
-                // Удалить цель
-                enemies = enemies.filter(e => e !== target);
-                units = units.filter(u => u !== target);
-            }
-        }
-    }
-
-    inRange(target) {
-        const dist = Math.abs(this.x - target.x) + Math.abs(this.y - target.y); // Манхэттен для простоты
-        return dist <= this.range;
-    }
-
-    draw() {
-        ctx.fillStyle = this.faction === 'human' ? '#00FF00' : '#FF0000'; // Зеленый/Красный
-        ctx.fillRect(this.x * (mode === 'city' ? gridSize : battleGridSize), this.y * (mode === 'city' ? gridSize : battleGridSize), (mode === 'city' ? gridSize : battleGridSize), (mode === 'city' ? gridSize : battleGridSize));
-    }
+// Загрузка JSON
+async function loadBuildings() {
+    const response = await fetch('buildings.json');
+    buildingData = await response.json();
 }
 
 // Инициализация
-function init() {
+async function init() {
+    await loadBuildings();
     loadProgress();
-    startCityTimers();
     draw();
     updateInfo();
-}
 
-// Таймеры для города
-function startCityTimers() {
-    setInterval(() => {
-        // Производство еды
-        buildings.forEach(b => {
-            if (b.type === 'farm' && b.workers >= 3) food += b.workers; // +еда
-            if (b.type === 'kitchen' && b.workers >= 4) food += b.workers * 2; // Переработка
-        });
-
-        // Рост/смерть
-        if (food >= population) {
-            population += Math.floor(population * 0.01); // +1%
-        } else {
-            // Запустить таймер смерти через 10 мин (600000 ms)
-            if (!timers.length) {
-                timers.push(setTimeout(() => { population = 0; alert('Игра over: Все умерли!'); }, 600000));
-            }
-        }
-        food -= population; // Потребление
-        if (food < 0) food = 0;
-
-        // Уровни
-        if (population > 1000 && level === 1) {
-            level = 2;
-            alert('Уровень 2: Нужна вода! Построй скважину.');
-        }
-
-        draw();
-        updateInfo();
-    }, 60000); // Каждую минуту
+    // События
+    canvas.addEventListener('click', handleClick);
+    canvas.addEventListener('wheel', handleWheel);
+    document.addEventListener('keydown', handleKeydown);
 }
 
 // Рисование
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const currentGrid = mode === 'city' ? gridSize : battleGridSize;
-    const currentWidth = mode === 'city' ? mapWidth : battleWidth;
-    const currentHeight = mode === 'city' ? mapHeight : battleHeight;
-    canvas.width = currentWidth * currentGrid;
-    canvas.height = currentHeight * currentGrid;
+    const cellSize = GRID_SIZE * zoom;
 
-    // Grid
-    for (let i = 0; i <= currentWidth; i++) {
-        ctx.moveTo(i * currentGrid, 0); ctx.lineTo(i * currentGrid, canvas.height); ctx.stroke();
-    }
-    for (let j = 0; j <= currentHeight; j++) {
-        ctx.moveTo(0, j * currentGrid); ctx.lineTo(canvas.width, j * currentGrid); ctx.stroke();
-    }
+    // Рисуй только видимую часть
+    for (let y = Math.max(0, cameraY); y < Math.min(WORLD_HEIGHT, cameraY + VIEW_HEIGHT / zoom + 1); y++) {
+        for (let x = Math.max(0, cameraX); x < Math.min(WORLD_WIDTH, cameraX + VIEW_WIDTH / zoom + 1); x++) {
+            const drawX = (x - cameraX) * cellSize;
+            const drawY = (y - cameraY) * cellSize;
+            ctx.strokeRect(drawX, drawY, cellSize, cellSize);  // Grid
 
-    // Здания/Юниты
-    if (mode === 'city') {
-        buildings.forEach(b => {
-            ctx.fillStyle = '#A52A2A'; ctx.fillRect(b.x * currentGrid, b.y * currentGrid, currentGrid, currentGrid);
-        });
+            if (grid[y][x]) {
+                ctx.fillStyle = '#A52A2A';  // Цвет здания
+                ctx.fillRect(drawX, drawY, cellSize, cellSize);
+            }
+        }
     }
-    units.forEach(u => u.draw());
-    enemies.forEach(e => e.draw());
 }
 
 // Обновление инфо
 function updateInfo() {
-    document.getElementById('info').innerText = `Население: ${population} | Еда: ${food} | Металл: ${metal} | Уровень: ${level} | Прогресс: ${progress}/19`;
+    document.getElementById('info').innerText = `Население: ${population}/${maxPopulation} | Дерево: ${resources.wood} | Камень: ${resources.stone} | Железо: ${resources.iron}`;
 }
 
-// События: Клик
-canvas.addEventListener('click', (e) => {
+// Клик: ЛКМ
+function handleClick(e) {
     const rect = canvas.getBoundingClientRect();
-    const clickX = Math.floor((e.clientX - rect.left) / (mode === 'city' ? gridSize : battleGridSize));
-    const clickY = Math.floor((e.clientY - rect.top) / (mode === 'city' ? gridSize : battleGridSize));
+    const clickX = Math.floor((e.clientX - rect.left) / (GRID_SIZE * zoom) + cameraX);
+    const clickY = Math.floor((e.clientY - rect.top) / (GRID_SIZE * zoom) + cameraY);
 
-    if (mode === 'city') {
-        // Строительство или действие
-    } else if (mode === 'battle') {
-        // Выбор юнита, перемещение/атака (упрощённо: клик на юнита -> атакуй ближайшего)
-        units.forEach(u => {
-            if (u.x === clickX && u.y === clickY && enemies.length) {
-                u.act(enemies[0]); // Атакуй первого врага
-                // AI ход: enemies act on units
-                enemies.forEach(e => e.act(units[0]));
-                if (enemies.length === 0) {
-                    progress++;
-                    mode = 'city';
-                    metal += 150;
-                    if (Math.random() > 0.5) unlocks.tank = true; // Чертеж
-                    alert('Победа! +Ресурсы и чертеж?');
-                }
-            }
-        });
+    if (clickX < 0 || clickX >= WORLD_WIDTH || clickY < 0 || clickY >= WORLD_HEIGHT) return;
+
+    const cell = grid[clickY][clickX];
+    if (cell) {
+        // Здание: Статы + снос
+        let stats = `Здание: ${cell.name}\nБонусы: ${JSON.stringify(cell.bonuses)}`;
+        if (confirm(`${stats}\nСнести?`)) {
+            removeBuilding(clickX, clickY);
+        } else if (cell.name === 'Академия') {
+            alert('Меню исследований: Unlock новые постройки/юниты (TODO)');
+        }
+    } else {
+        // Пусто: Меню построек
+        let options = buildingData.buildings.map(b => b.name).join('\n');
+        let choice = prompt(`Доступные постройки:\n${options}\nВведи имя для постройки:`);
+        if (choice) buildBuilding(choice, clickX, clickY);
     }
     draw();
-    updateInfo();
-});
-
-// Кнопки строительства
-document.getElementById('buildFarm').addEventListener('click', () => {
-    // Пример: строй на (0,0), если population >10
-    if (population > 10) {
-        buildings.push(new Building('farm', 0, 0));
-        population -= 10; // Стоимость
-        // Назначь workers кликом позже
-    }
-});
-document.getElementById('buildKitchen').addEventListener('click', () => {
-    if (population > 10) buildings.push(new Building('kitchen', 1, 0)); population -= 10;
-});
-
-// Старт миссии
-document.getElementById('startMission').addEventListener('click', () => {
-    mode = 'battle';
-    units = [new Unit('soldier', 0, 7)]; // Твой юнит слева
-    enemies = [new Unit('robot_soldier', 14, 7, 'robot')]; // Враг справа
-    draw();
-});
-
-// Сохранение/Загрузка (расширь)
-function saveProgress() {
-    const saveData = { population, food, metal, level, progress, buildings: buildings.map(b => ({type: b.type, x: b.x, y: b.y, workers: b.workers})), unlocks };
-    localStorage.setItem('mensDayGame', JSON.stringify(saveData));
 }
+
+// Строительство
+function buildBuilding(name, baseX, baseY) {
+    const building = buildingData.buildings.find(b => b.name === name);
+    if (!building) return alert('Нет такой постройки!');
+
+    // Проверка стоимости
+    for (let res in building.cost) {
+        if (resources[res] < building.cost[res]) return alert(`Недостаточно ${res}!`);
+    }
+
+    // Проверка формы (3x3, позиции относительные)
+    for (let pos of building.shape) {
+        const dx = Math.floor(pos % 3);
+        const dy = Math.floor(pos / 3);
+        const tx = baseX + dx;
+        const ty = baseY + dy;
+        if (tx >= WORLD_WIDTH || ty >= WORLD_HEIGHT || grid[ty][tx]) return alert('Место занято!');
+    }
+
+    // Строй: Помести объект на все клетки формы
+    const buildingInstance = { name: building.name, bonuses: building.bonuses, baseX, baseY, shape: building.shape };
+    for (let pos of building.shape) {
+        const dx = Math.floor(pos % 3);
+        const dy = Math.floor(pos / 3);
+        grid[baseY + dy][baseX + dx] = buildingInstance;
+    }
+
+    // Вычти стоимость
+    for (let res in building.cost) resources[res] -= building.cost[res];
+
+    // Примени бонусы
+    if (building.bonuses.maxPopulation) maxPopulation += building.bonuses.maxPopulation;
+    if (building.bonuses.armyStorage) {
+        // TODO: Хранение армии по HP
+        alert('Казарма: Хранит до 20 юнитов (TODO: добавить юниты)');
+    }
+}
+
+// Снос
+function removeBuilding(x, y) {
+    const building = grid[y][x];
+    if (!building) return;
+
+    // Удали с всех клеток
+    for (let pos of building.shape) {
+        const dx = Math.floor(pos % 3);
+        const dy = Math.floor(pos / 3);
+        grid[building.baseY + dy][building.baseX + dx] = null;
+    }
+
+    // Верни бонусы (обратно)
+    if (building.bonuses.maxPopulation) maxPopulation -= building.bonuses.maxPopulation;
+}
+
+// Zoom (wheel)
+function handleWheel(e) {
+    const delta = e.deltaY < 0 ? 0.1 : -0.1;
+    zoom = Math.max(0.5, Math.min(2, zoom + delta));
+    draw();
+}
+
+// Движение (WASD/стрелки)
+function handleKeydown(e) {
+    const speed = 1 / zoom;  // Быстрее при зуме out
+    if (e.key === 'w' || e.key === 'ArrowUp') cameraY = Math.max(0, cameraY - speed);
+    if (e.key === 's' || e.key === 'ArrowDown') cameraY = Math.min(WORLD_HEIGHT - VIEW_HEIGHT / zoom, cameraY + speed);
+    if (e.key === 'a' || e.key === 'ArrowLeft') cameraX = Math.max(0, cameraX - speed);
+    if (e.key === 'd' || e.key === 'ArrowRight') cameraX = Math.min(WORLD_WIDTH - VIEW_WIDTH / zoom, cameraX + speed);
+    draw();
+}
+
+// Сохранение/Загрузка (grid сериализуем)
+function saveProgress() {
+    const saveData = {
+        population, maxPopulation, resources,
+        grid: grid.map(row => row.map(cell => cell ? {name: cell.name, baseX: cell.baseX, baseY: cell.baseY, shape: cell.shape} : null))
+    };
+    localStorage.setItem('mensDayGame', JSON.stringify(saveData));
+    alert('Сохранено!');
+}
+
 function loadProgress() {
     const saved = localStorage.getItem('mensDayGame');
     if (saved) {
         const data = JSON.parse(saved);
-        population = data.population; food = data.food; metal = data.metal; level = data.level; progress = data.progress;
-        buildings = data.buildings.map(b => new Building(b.type, b.x, b.y)); buildings.forEach((b, i) => b.workers = data.buildings[i].workers);
-        unlocks = data.unlocks;
+        population = data.population;
+        maxPopulation = data.maxPopulation;
+        resources = data.resources;
+        grid = data.grid.map(row => row.map(cell => {
+            if (cell) {
+                const building = buildingData.buildings.find(b => b.name === cell.name);
+                return { name: cell.name, bonuses: building.bonuses, baseX: cell.baseX, baseY: cell.baseY, shape: cell.shape };
+            }
+            return null;
+        }));
+        alert('Загружено!');
     }
 }
 
-// Старт
-init();
 document.getElementById('saveBtn').addEventListener('click', saveProgress);
 document.getElementById('loadBtn').addEventListener('click', loadProgress);
+
+// Старт
+init();

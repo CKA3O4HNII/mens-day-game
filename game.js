@@ -86,12 +86,13 @@ class Game{
   }
 
   initDOM(){
-    this.gridEl=document.getElementById('grid');this.gridContainer=document.getElementById('gridContainer');
-    this.resourcesEl=document.getElementById('resources');this.cityStatsEl=document.getElementById('cityStats');
-    this.saveBtn=document.getElementById('saveBtn');this.loadBtn=document.getElementById('loadBtn');this.missionsBtn=document.getElementById('missionsBtn');
-    this.battleModal=document.getElementById('battleModal');this.battleGrid=document.getElementById('battleGrid');this.battleLog=document.getElementById('battleLog');
-    // compute grid size
-    this.gridEl.style.width=(this.gridW*this.cellSize)+'px';this.gridEl.style.height=(this.gridH*this.cellSize)+'px';
+  this.gridEl=document.getElementById('grid');this.gridContainer=document.getElementById('gridContainer');
+  this.resourcesEl=document.getElementById('resources');this.cityStatsEl=document.getElementById('cityStats');
+  this.saveBtn=document.getElementById('saveBtn');this.loadBtn=document.getElementById('loadBtn');this.missionsBtn=document.getElementById('missionsBtn');
+  this.battleModal=document.getElementById('battleModal');this.battleGrid=document.getElementById('battleGrid');this.battleLog=document.getElementById('battleLog');
+  // compute grid size
+  if(!this.gridEl || !this.gridContainer){ console.error('Missing #grid or #gridContainer in DOM. Ensure index.html layout matches expected IDs.'); return; }
+  this.gridEl.style.width=(this.gridW*this.cellSize)+'px';this.gridEl.style.height=(this.gridH*this.cellSize)+'px';
   }
 
   attachEvents(){

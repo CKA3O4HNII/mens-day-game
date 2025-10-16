@@ -342,10 +342,14 @@ class Game{
   worldToCell(clientX,clientY){
   if(!this.gridEl) return {cx:-1, cy:-1};
   const rect=this.gridEl.getBoundingClientRect();
-  const x = (clientX - rect.left + this.offsetX)/ (this.scale*this.cellSize);
-  const y = (clientY - rect.top + this.offsetY)/ (this.scale*this.cellSize);
-  if(!isFinite(x) || !isFinite(y)) return {cx:-1, cy:-1};
-  return {cx:Math.floor(x), cy:Math.floor(y)};
+  // rect.left/top already reflect the applied transform (translate + scale).
+  // Invert the transform: mapPixel = (client - rect.left) / scale
+  const mapX = (clientX - rect.left) / this.scale;
+  const mapY = (clientY - rect.top) / this.scale;
+  if(!isFinite(mapX) || !isFinite(mapY)) return {cx:-1, cy:-1};
+  const cx = Math.floor(mapX / this.cellSize);
+  const cy = Math.floor(mapY / this.cellSize);
+  return {cx, cy};
   }
 
   onGridClick(e){

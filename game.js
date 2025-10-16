@@ -156,7 +156,17 @@ class Game{
     const biName=document.getElementById('biName'); const biCost=document.getElementById('biCost'); const biBonuses=document.getElementById('biBonuses'); const cancel=document.getElementById('cancelPlace');
     if(biName) biName.textContent = def.name; if(biCost) biCost.textContent = 'Стоимость: '+JSON.stringify(def.cost); if(biBonuses) biBonuses.textContent = 'Бонусы: '+JSON.stringify(def.bonuses||{});
     if(cancel){ cancel.classList.remove('hidden'); cancel.onclick = ()=>{ this.placingDef=null; cancel.classList.add('hidden'); if(biName) biName.textContent='Выберите здание'; } }
+    this.setPlacementMode(true);
+    // highlight selected in sidebar
+    const entries = document.querySelectorAll('.building-entry'); entries.forEach((el)=>el.classList.remove('selected')); const sel = document.querySelector(`.building-entry[data-idx="${idx}"]`); if(sel) sel.classList.add('selected');
   }
+
+  setPlacementMode(on){
+    const hint = document.getElementById('placementHint'); if(hint) { if(on) hint.classList.remove('hidden'); else hint.classList.add('hidden'); }
+    this.placementMode = !!on;
+  }
+
+  clearPlacementMode(){ this.placingDef=null; this.setPlacementMode(false); const entries = document.querySelectorAll('.building-entry'); entries.forEach((el)=>el.classList.remove('selected')); const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden'); }
 
   initDOM(){
   this.gridEl=document.getElementById('grid');this.gridContainer=document.getElementById('gridContainer');
@@ -232,8 +242,8 @@ class Game{
       const info = `${inst.def.name}\nBonuses: ${JSON.stringify(inst.def.bonuses)}`;
       if(confirm(info + '\nУничтожить?')){this.demolishBuilding(inst)}
     } else {
-      // empty cell: if user selected a building from sidebar, place it here
-      if(this.placingDef){ const def=this.placingDef; if(this.canAfford(def.cost) && this.canPlaceShape(def.shape,pos.cx,pos.cy)){ this.spend(def.cost); this.placeBuilding(def,pos.cx,pos.cy); this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden'); const biName=document.getElementById('biName'); if(biName) biName.textContent='Выберите здание'; } else { alert('Невозможно построить здесь или недостаточно ресурсов.'); } }
+      // empty cell: if placement mode on, place here via click
+      if(this.placementMode && this.placingDef){ const def=this.placingDef; if(this.canAfford(def.cost) && this.canPlaceShape(def.shape,pos.cx,pos.cy)){ this.spend(def.cost); this.placeBuilding(def,pos.cx,pos.cy); this.clearPlacementMode(); } else { alert('Невозможно построить здесь или недостаточно ресурсов.'); } }
       // otherwise click does nothing
     }
     this.renderResources();

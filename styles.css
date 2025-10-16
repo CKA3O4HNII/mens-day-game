@@ -24,6 +24,9 @@ body{margin:0;font-family:Inter,Segoe UI,Arial;background:linear-gradient(180deg
 #buildingInfo{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.02)}
 .hidden{display:none}
 
+#placementHint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:rgba(0,0,0,0.6);padding:8px 12px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);color:#fff}
+.building-entry.selected{outline:2px solid rgba(217,119,6,0.9);transform:translateX(2px);}
+
 /* building inner visuals */
 .building .inner{font-size:12px;color:#fff;text-shadow:0 1px 0 rgba(0,0,0,0.5)}
 .building.building-new{box-shadow:0 8px 20px rgba(0,0,0,0.6)}

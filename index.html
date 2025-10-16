@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Мужской Альянс: Эпоха Стали и Огня</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="ui">
+    <div id="topbar">
+      <h1>Мужской Альянс: Эпоха Стали и Огня</h1>
+      <div id="controls">
+        <button id="saveBtn">Сохранить</button>
+        <button id="loadBtn">Загрузить</button>
+        <button id="missionsBtn">Миссии</button>
+      </div>
+    </div>
+    <div id="info">
+      <div id="resources">Загрузка...</div>
+      <div id="cityStats"></div>
+    </div>
+  </div>
+
+  <div id="game">
+    <div id="gridContainer">
+      <div id="grid"></div>
+    </div>
+  </div>
+
+  <!-- Battle modal / view -->
+  <div id="battleModal" class="hidden">
+    <div id="battleUI">
+      <button id="closeBattle">Закрыть миссию</button>
+      <div id="battleGrid"></div>
+      <div id="battleLog"></div>
+    </div>
+  </div>
+
+  <script src="game.js" type="module"></script>
+</body>
+</html>

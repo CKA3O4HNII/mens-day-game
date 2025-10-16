@@ -231,6 +231,7 @@ class Game{
   console.log('attachEvents: wiring UI events');
   document.addEventListener('wheel', (e)=>{e.preventDefault();this.onZoom(e)} ,{passive:false});
   document.addEventListener('keydown',(e)=>this.onKey(e));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.clearPlacementMode(); });
   // global pointer event logging for debugging drag issues
   document.addEventListener('pointerdown', (e)=>{ try{ this.logDragEvent && this.logDragEvent('pointerdown', e); }catch(_){} }, true);
   document.addEventListener('pointermove', (e)=>{ try{ this.logDragEvent && this.logDragEvent('pointermove', e); }catch(_){} }, true);
@@ -246,6 +247,36 @@ class Game{
       this.gridContainer.addEventListener('mousemove', (e)=>{ if(this.placingDef) { const pos=this.worldToCell(e.clientX,e.clientY); this.updatePlacementPreview(pos.cx,pos.cy); } });
       this.gridContainer.addEventListener('touchmove', (e)=>{ if(this.placingDef){ const t = e.touches[0]; const pos=this.worldToCell(t.clientX,t.clientY); this.updatePlacementPreview(pos.cx,pos.cy); } }, {passive:true});
     }
+    
+      // global pointermove so ghost follows the mouse even outside the grid container (useful after selecting from sidebar)
+      document.addEventListener('pointermove', (e)=>{
+        try{
+          if(this.placingDef && this.ghost){ this.ghost.style.left=(e.clientX+8)+'px'; this.ghost.style.top=(e.clientY+8)+'px'; }
+          // if pointer is above grid, update preview
+          if(this.placingDef && this.gridContainer){ const rect=this.gridContainer.getBoundingClientRect(); if(e.clientX>=rect.left && e.clientX<=rect.right && e.clientY>=rect.top && e.clientY<=rect.bottom){ const pos=this.worldToCell(e.clientX,e.clientY); this.updatePlacementPreview(pos.cx,pos.cy); } }
+        }catch(_){}
+      }, {passive:true});
+
+      // click-to-place: global click will attempt to place if player clicked on the grid while in placement mode
+      document.addEventListener('click', (e)=>{
+        try{
+          if(!this.placementMode || !this.placingDef) return;
+          if(!this.gridContainer) return;
+          const rect=this.gridContainer.getBoundingClientRect();
+          if(e.clientX<rect.left || e.clientX>rect.right || e.clientY<rect.top || e.clientY>rect.bottom) return; // clicked outside grid
+          const pos=this.worldToCell(e.clientX,e.clientY);
+          if(pos.cx<0||pos.cy<0) return;
+          if(this.canAfford(this.placingDef.cost) && this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy)){
+            this.spend(this.placingDef.cost);
+            this.placeBuilding(this.placingDef,pos.cx,pos.cy);
+            this.logAction(`Построено ${this.placingDef.name} (click-to-place)`);
+            this.clearPlacementMode();
+          } else {
+            // show a small hint instead of alert to avoid breaking event flow
+            this.logAction('Невозможно построить здесь или недостаточно ресурсов (click-to-place)');
+          }
+        }catch(err){ console.warn('click-to-place failed', err) }
+      }, true);
   if(this.saveBtn) this.saveBtn.addEventListener('click', ()=>this.save()); else console.warn('attachEvents: missing saveBtn');
   if(this.loadBtn) this.loadBtn.addEventListener('click', ()=>this.load()); else console.warn('attachEvents: missing loadBtn');
   if(this.missionsBtn) this.missionsBtn.addEventListener('click', ()=>this.openMissions()); else console.warn('attachEvents: missing missionsBtn');

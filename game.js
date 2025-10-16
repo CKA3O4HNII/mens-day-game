@@ -85,16 +85,18 @@ class Game{
     // create ghost element that follows cursor
     this.ghost = document.createElement('div'); this.ghost.className='ghost-building'; this.ghost.textContent = def.name; document.body.appendChild(this.ghost);
     this.placingDef = def;
-    const onMove = (e)=>this.updateDrag(e);
-    const onUp = (e)=>{ this.endDrag(e); window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+  // pointer capture for reliability
+  try{ entryEl.setPointerCapture(ev.pointerId); }catch(e){}
+  const onMove = (e)=>{ /*console.debug('drag move', e.clientX, e.clientY)*/; this.updateDrag(e); };
+  const onUp = (e)=>{ /*console.debug('drag up', e.clientX, e.clientY)*/; this.endDrag(e); window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); try{ entryEl.releasePointerCapture(ev.pointerId); }catch(err){} };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
     // initial pos
     this.updateDrag(ev);
   }
 
   updateDrag(ev){
-    if(this.ghost) this.ghost.style.left = ev.clientX+'px', this.ghost.style.top = ev.clientY+'px';
+  if(this.ghost) { try{ this.ghost.style.left = ev.clientX+'px'; this.ghost.style.top = ev.clientY+'px'; }catch(e){} }
     // compute cell under cursor and show preview
     const pos=this.worldToCell(ev.clientX, ev.clientY);
     this.updatePlacementPreview(pos.cx, pos.cy);
@@ -102,6 +104,7 @@ class Game{
 
   endDrag(ev){
     if(this.ghost){ this.ghost.remove(); this.ghost=null; }
+  try{ if(ev && ev.pointerId) { /* nothing */ } }catch(e){}
     const pos=this.worldToCell(ev.clientX, ev.clientY);
     if(this.placingDef && this.canAfford(this.placingDef.cost) && this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy)){
       this.spend(this.placingDef.cost); this.placeBuilding(this.placingDef,pos.cx,pos.cy);
@@ -164,10 +167,12 @@ class Game{
   }
 
   worldToCell(clientX,clientY){
-    const rect=this.gridEl.getBoundingClientRect();
-    const x = (clientX - rect.left + this.offsetX)/ (this.scale*this.cellSize);
-    const y = (clientY - rect.top + this.offsetY)/ (this.scale*this.cellSize);
-    return {cx:Math.floor(x), cy:Math.floor(y)};
+  if(!this.gridEl) return {cx:-1, cy:-1};
+  const rect=this.gridEl.getBoundingClientRect();
+  const x = (clientX - rect.left + this.offsetX)/ (this.scale*this.cellSize);
+  const y = (clientY - rect.top + this.offsetY)/ (this.scale*this.cellSize);
+  if(!isFinite(x) || !isFinite(y)) return {cx:-1, cy:-1};
+  return {cx:Math.floor(x), cy:Math.floor(y)};
   }
 
   onGridClick(e){

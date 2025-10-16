@@ -192,6 +192,8 @@ class Game{
     if(biName) biName.textContent = def.name; if(biCost) biCost.textContent = 'Стоимость: '+JSON.stringify(def.cost); if(biBonuses) biBonuses.textContent = 'Бонусы: '+JSON.stringify(def.bonuses||{});
     if(cancel){ cancel.classList.remove('hidden'); cancel.onclick = ()=>{ this.placingDef=null; cancel.classList.add('hidden'); if(biName) biName.textContent='Выберите здание'; } }
     this.setPlacementMode(true);
+  // create a preview ghost so the player sees a model while selecting (click-to-place fallback)
+  try{ this.createGhostForDef(def); }catch(_){ }
     // highlight selected in sidebar
     const entries = document.querySelectorAll('.building-entry'); entries.forEach((el)=>el.classList.remove('selected')); const sel = document.querySelector(`.building-entry[data-idx="${idx}"]`); if(sel) sel.classList.add('selected');
   }
@@ -201,7 +203,19 @@ class Game{
     this.placementMode = !!on;
   }
 
-  clearPlacementMode(){ this.placingDef=null; this.setPlacementMode(false); const entries = document.querySelectorAll('.building-entry'); entries.forEach((el)=>el.classList.remove('selected')); const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden'); }
+  clearPlacementMode(){
+    // remove ghost preview if any
+    try{ if(this.ghost){ this.ghost.remove(); this.ghost=null; } }catch(_){}
+    this.placingDef=null; this.setPlacementMode(false);
+    const entries = document.querySelectorAll('.building-entry'); entries.forEach((el)=>el.classList.remove('selected'));
+    const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden');
+  }
+
+  createGhostForDef(def){
+    // ensure single ghost
+    try{ if(this.ghost){ this.ghost.remove(); this.ghost=null; } }catch(_){ }
+    const g = document.createElement('div'); g.className='ghost-building '+this.cssForName(def.name); g.textContent = def.name; g.style.left='50%'; g.style.top='50%'; document.body.appendChild(g); this.ghost = g;
+  }
 
   initDOM(){
   this.gridEl=document.getElementById('grid');this.gridContainer=document.getElementById('gridContainer');
@@ -228,7 +242,7 @@ class Game{
     }
     // update preview on move when user selected a building
     if(this.gridContainer) {
-      this.gridContainer.addEventListener('pointermove', (e)=>{ if(this.placingDef) { const pos=this.worldToCell(e.clientX,e.clientY); this.updatePlacementPreview(pos.cx,pos.cy); } });
+  this.gridContainer.addEventListener('pointermove', (e)=>{ if(this.placingDef) { const pos=this.worldToCell(e.clientX,e.clientY); this.updatePlacementPreview(pos.cx,pos.cy); try{ if(this.ghost){ this.ghost.style.left=(e.clientX+8)+'px'; this.ghost.style.top=(e.clientY+8)+'px'; } }catch(_){} } });
       this.gridContainer.addEventListener('mousemove', (e)=>{ if(this.placingDef) { const pos=this.worldToCell(e.clientX,e.clientY); this.updatePlacementPreview(pos.cx,pos.cy); } });
       this.gridContainer.addEventListener('touchmove', (e)=>{ if(this.placingDef){ const t = e.touches[0]; const pos=this.worldToCell(t.clientX,t.clientY); this.updatePlacementPreview(pos.cx,pos.cy); } }, {passive:true});
     }

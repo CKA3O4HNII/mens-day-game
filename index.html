@@ -4,7 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Мужской Альянс: Эпоха Стали и Огня</title>
+  <!-- Preload stylesheet to prioritize rendering, keep regular link for compatibility -->
+  <link rel="preload" href="styles.css" as="style">
   <link rel="stylesheet" href="styles.css">
+  <!-- Small inline data-URI favicon to avoid browser requesting /favicon.ico and causing 404 noise -->
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23222'/><text x='8' y='11' font-size='8' fill='%23fff' text-anchor='middle' alignment-baseline='central'>MD</text></svg>">
 </head>
 <body>
   <div id="ui">

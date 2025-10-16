@@ -74,9 +74,53 @@ class Game{
       const cost=document.createElement('div');cost.className='cost';cost.textContent=Object.entries(b.cost||{}).map(kv=>kv[0]+':'+kv[1]).join(', ');
       entry.appendChild(name);entry.appendChild(cost);
       entry.addEventListener('click', ()=>{ this.selectBuildingForPlace(idx); });
+      // drag start for pointer events
+      entry.addEventListener('pointerdown', (ev)=>{ ev.preventDefault(); this.startDragPlacement(ev, idx, entry); });
       listEl.appendChild(entry);
     });
   }
+
+  startDragPlacement(ev, idx, entryEl){
+    const def=this.buildingDefs[idx]; if(!def) return;
+    // create ghost element that follows cursor
+    this.ghost = document.createElement('div'); this.ghost.className='ghost-building'; this.ghost.textContent = def.name; document.body.appendChild(this.ghost);
+    this.placingDef = def;
+    const onMove = (e)=>this.updateDrag(e);
+    const onUp = (e)=>{ this.endDrag(e); window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    // initial pos
+    this.updateDrag(ev);
+  }
+
+  updateDrag(ev){
+    if(this.ghost) this.ghost.style.left = ev.clientX+'px', this.ghost.style.top = ev.clientY+'px';
+    // compute cell under cursor and show preview
+    const pos=this.worldToCell(ev.clientX, ev.clientY);
+    this.updatePlacementPreview(pos.cx, pos.cy);
+  }
+
+  endDrag(ev){
+    if(this.ghost){ this.ghost.remove(); this.ghost=null; }
+    const pos=this.worldToCell(ev.clientX, ev.clientY);
+    if(this.placingDef && this.canAfford(this.placingDef.cost) && this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy)){
+      this.spend(this.placingDef.cost); this.placeBuilding(this.placingDef,pos.cx,pos.cy);
+    }
+    this.clearPlacementPreview(); this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden');
+    this.renderResources();
+  }
+
+  updatePlacementPreview(cx, cy){
+    this.clearPlacementPreview(); if(!this.placingDef) return; const shape=this.placingDef.shape;
+    const valid = this.canPlaceShape(shape,cx,cy);
+    // create a preview overlay sized to bounding box
+    const minX= Math.min(...shape.map(s=>s%3)); const maxX=Math.max(...shape.map(s=>s%3)); const minY=Math.min(...shape.map(s=>Math.floor(s/3))); const maxY=Math.max(...shape.map(s=>Math.floor(s/3)));
+    const width = (maxX-minX+1)*this.cellSize; const height=(maxY-minY+1)*this.cellSize;
+    const left = (cx + minX -1)*this.cellSize; const top = (cy + minY -1)*this.cellSize;
+    const preview=document.createElement('div'); preview.className = 'preview-cell '+(valid? 'preview-valid':'preview-invalid'); preview.style.left = left+'px'; preview.style.top = top+'px'; preview.style.width = width+'px'; preview.style.height = height+'px'; this.gridEl.appendChild(preview); this._lastPreview = preview;
+  }
+
+  clearPlacementPreview(){ if(this._lastPreview){ this._lastPreview.remove(); this._lastPreview=null; } }
 
   selectBuildingForPlace(idx){
     const def=this.buildingDefs[idx]; if(!def) return; this.placingDef=def;

@@ -136,6 +136,25 @@ class Game{
     this.updateDrag(ev);
   }
 
+  // on-screen drag/pointer debug HUD
+  ensureDragHUD(){
+    if(this._dragHud) return this._dragHud;
+    const hud = document.createElement('div'); hud.id='dragHud'; hud.style.position='fixed'; hud.style.right='8px'; hud.style.bottom='8px'; hud.style.zIndex=99999; hud.style.background='rgba(0,0,0,0.6)'; hud.style.color='#fff'; hud.style.padding='8px'; hud.style.fontSize='12px'; hud.style.borderRadius='6px'; hud.style.maxWidth='220px'; hud.style.fontFamily='monospace'; hud.innerHTML = '<div><b>Drag HUD</b></div><div id="dragHudState">idle</div><div id="dragHudCoords"></div>';
+    document.body.appendChild(hud);
+    this._dragHud = hud;
+    return hud;
+  }
+
+  logDragEvent(name, e){
+    try{
+      console.debug('DRAG EVENT', name, {type: e.type, pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, isPrimary: e.isPrimary, pointerType: e.pointerType});
+      const hud = this.ensureDragHUD();
+      const state = hud.querySelector('#dragHudState'); const coords = hud.querySelector('#dragHudCoords');
+      if(state) state.textContent = `evt: ${name} state: ${this.placingDef ? ('placing:'+this.placingDef.name) : 'idle'}`;
+      if(coords) coords.textContent = `x:${e.clientX || 0} y:${e.clientY || 0} id:${e.pointerId || 0} type:${e.pointerType || 'n/a'}`;
+    }catch(err){ console.warn('logDragEvent failed', err) }
+  }
+
   updateDrag(ev){
   if(this.ghost) { try{ this.ghost.style.left = (ev.clientX||0)+'px'; this.ghost.style.top = (ev.clientY||0)+'px'; }catch(e){} }
     // compute cell under cursor and show preview
@@ -198,6 +217,10 @@ class Game{
   console.log('attachEvents: wiring UI events');
   document.addEventListener('wheel', (e)=>{e.preventDefault();this.onZoom(e)} ,{passive:false});
   document.addEventListener('keydown',(e)=>this.onKey(e));
+  // global pointer event logging for debugging drag issues
+  document.addEventListener('pointerdown', (e)=>{ try{ this.logDragEvent && this.logDragEvent('pointerdown', e); }catch(_){} }, true);
+  document.addEventListener('pointermove', (e)=>{ try{ this.logDragEvent && this.logDragEvent('pointermove', e); }catch(_){} }, true);
+  document.addEventListener('pointerup', (e)=>{ try{ this.logDragEvent && this.logDragEvent('pointerup', e); }catch(_){} }, true);
   if(this.gridContainer) this.gridContainer.addEventListener('click', (e)=>this.onGridClick(e)); else console.warn('attachEvents: missing gridContainer');
     if(this.gridContainer){
       this.gridContainer.addEventListener('dragover', (e)=>{ e.preventDefault(); /* allow drop */ });

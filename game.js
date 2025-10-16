@@ -65,6 +65,15 @@ class Game{
     this.populateSidebar();
   }
 
+  logAction(msg){
+    const time = new Date().toLocaleTimeString();
+    console.log(`[ACTION ${time}] ${msg}`);
+    try{
+      const actionLogEl = document.getElementById('actionLog');
+      if(actionLogEl){ const e = document.createElement('div'); e.className='entry'; e.textContent = msg; const t = document.createElement('div'); t.className='entry time'; t.textContent = time; actionLogEl.prepend(t); actionLogEl.prepend(e); while(actionLogEl.children.length>120) actionLogEl.removeChild(actionLogEl.lastChild); }
+    }catch(e){/* ignore */}
+  }
+
   populateSidebar(){
     const listEl = document.getElementById('buildingList'); if(!listEl) return; listEl.innerHTML='';
     this.buildingDefs.forEach((b,idx)=>{
@@ -73,7 +82,7 @@ class Game{
       const name=document.createElement('div');name.textContent=b.name;
       const cost=document.createElement('div');cost.className='cost';cost.textContent=Object.entries(b.cost||{}).map(kv=>kv[0]+':'+kv[1]).join(', ');
       entry.appendChild(name);entry.appendChild(cost);
-  entry.addEventListener('click', ()=>{ this.selectBuildingForPlace(idx); });
+  entry.addEventListener('click', ()=>{ this.logAction(`Выбрана постройка ${b.name}`); this.selectBuildingForPlace(idx); });
   // drag start for pointer events; add fallbacks and logs
   entry.addEventListener('pointerdown', (ev)=>{ console.log('pointerdown on entry', idx); ev.preventDefault(); this.startDragPlacement(ev, idx, entry); });
   entry.addEventListener('mousedown', (ev)=>{ console.log('mousedown fallback on entry', idx); ev.preventDefault(); this.startDragPlacement(ev, idx, entry); });
@@ -93,8 +102,9 @@ class Game{
     // start the same ghost/placing flow
     this.startDragPlacement({clientX, clientY, pointerId: ev.pointerId || 0}, idx, entryEl);
     // attach document dragover/drop to update
-    this._htmlDragOver = (e)=>{ e.preventDefault(); this.updateDrag(e); };
-    this._htmlDrop = (e)=>{ e.preventDefault(); this.endDrag(e); this.cleanupHtmlDrag(); };
+  console.log('startHtmlDrag: attaching document drag handlers');
+  this._htmlDragOver = (e)=>{ e.preventDefault(); try{ this.updateDrag(e); }catch(err){ console.warn('updateDrag failed during html dragover',err)} };
+  this._htmlDrop = (e)=>{ e.preventDefault(); try{ this.endDrag(e); }catch(err){ console.warn('endDrag failed during html drop',err)} this.cleanupHtmlDrag(); };
     document.addEventListener('dragover', this._htmlDragOver);
     document.addEventListener('drop', this._htmlDrop);
   }
@@ -102,21 +112,24 @@ class Game{
   cleanupHtmlDrag(){
     if(this._htmlDragOver) { document.removeEventListener('dragover', this._htmlDragOver); this._htmlDragOver=null; }
     if(this._htmlDrop) { document.removeEventListener('drop', this._htmlDrop); this._htmlDrop=null; }
-    if(this.ghost){ this.ghost.remove(); this.ghost=null; }
-    this.clearPlacementPreview(); this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden');
-    this.renderResources();
+  console.log('cleanupHtmlDrag');
+  if(this.ghost){ try{ this.ghost.remove(); }catch(_){} this.ghost=null; }
+  try{ this.clearPlacementPreview(); }catch(_){}
+  this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden');
+  this.renderResources();
   }
 
   startDragPlacement(ev, idx, entryEl){
     const def=this.buildingDefs[idx]; if(!def) return;
-  console.log('startDragPlacement', idx, def.name, ev.type);
+  console.debug('startDragPlacement', {idx, name: def.name, clientX: ev && ev.clientX, clientY: ev && ev.clientY, pointerId: ev && ev.pointerId});
+  this.logAction(`Drag start: ${def.name}`);
   // create ghost element that follows cursor
   this.ghost = document.createElement('div'); this.ghost.className='ghost-building'; this.ghost.textContent = def.name; document.body.appendChild(this.ghost);
     this.placingDef = def;
   // pointer capture for reliability
-  try{ entryEl.setPointerCapture(ev.pointerId); }catch(e){}
-  const onMove = (e)=>{ /*console.debug('drag move', e.clientX, e.clientY)*/; this.updateDrag(e); };
-  const onUp = (e)=>{ /*console.debug('drag up', e.clientX, e.clientY)*/; this.endDrag(e); window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); try{ entryEl.releasePointerCapture(ev.pointerId); }catch(err){} };
+  try{ if(entryEl && ev && ev.pointerId){ entryEl.setPointerCapture(ev.pointerId); } }catch(e){ console.warn('setPointerCapture failed', e) }
+  const onMove = (e)=>{ console.debug('drag move event', {x: e.clientX, y: e.clientY, pointerId: e.pointerId}); this.updateDrag(e); };
+  const onUp = (e)=>{ console.debug('drag up event', {x: e.clientX, y: e.clientY, pointerId: e.pointerId}); try{ this.endDrag(e); }catch(err){ console.warn('endDrag threw', err) } finally { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); try{ if(entryEl && ev && ev.pointerId) entryEl.releasePointerCapture(ev.pointerId); }catch(err){} } };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
     // initial pos
@@ -124,21 +137,24 @@ class Game{
   }
 
   updateDrag(ev){
-  if(this.ghost) { try{ this.ghost.style.left = ev.clientX+'px'; this.ghost.style.top = ev.clientY+'px'; }catch(e){} }
+  if(this.ghost) { try{ this.ghost.style.left = (ev.clientX||0)+'px'; this.ghost.style.top = (ev.clientY||0)+'px'; }catch(e){} }
     // compute cell under cursor and show preview
-    const pos=this.worldToCell(ev.clientX, ev.clientY);
+    const cx = (ev && (ev.clientX || (ev.touches && ev.touches[0] && ev.touches[0].clientX))) || 0;
+    const cy = (ev && (ev.clientY || (ev.touches && ev.touches[0] && ev.touches[0].clientY))) || 0;
+    console.debug('updateDrag coords', {cx, cy, pointerId: ev && ev.pointerId});
+    const pos=this.worldToCell(cx, cy);
     this.updatePlacementPreview(pos.cx, pos.cy);
   }
 
   endDrag(ev){
-  console.log('endDrag', ev && ev.type);
-  if(this.ghost){ this.ghost.remove(); this.ghost=null; }
-  try{ if(ev && ev.pointerId) { /* nothing */ } }catch(e){}
-    const pos=this.worldToCell(ev.clientX, ev.clientY);
-    if(this.placingDef && this.canAfford(this.placingDef.cost) && this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy)){
-      this.spend(this.placingDef.cost); this.placeBuilding(this.placingDef,pos.cx,pos.cy);
-    }
-    this.clearPlacementPreview(); this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden');
+  console.debug('endDrag', {clientX: ev && ev.clientX, clientY: ev && ev.clientY, pointerId: ev && ev.pointerId});
+  this.logAction(`Drag end`);
+  // remove potential global listeners
+  try{ if(this._onPointerMove) document.removeEventListener('pointermove', this._onPointerMove); if(this._onPointerUp) document.removeEventListener('pointerup', this._onPointerUp); }catch(_){}
+  if(this.ghost){ try{ this.ghost.remove(); }catch(_){} this.ghost=null; }
+  try{ const cx = ev && (ev.clientX || (ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientX)) || 0; const cy = ev && (ev.clientY || (ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientY)) || 0; console.debug('endDrag final coords', {cx,cy}); const pos=this.worldToCell(cx,cy); if(this.placingDef && this.canAfford(this.placingDef.cost) && this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy)){ this.spend(this.placingDef.cost); this.placeBuilding(this.placingDef,pos.cx,pos.cy); } }catch(err){ console.warn('placement error at endDrag',err); }
+    try{ this.clearPlacementPreview(); }catch(_){}
+    this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden');
     this.renderResources();
   }
 
@@ -202,12 +218,34 @@ class Game{
 
   // global error logging for missing media/resource URIs
   installGlobalErrorHandler(){
+    const showErrorUI = (msg)=>{
+      try{
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const errorBox = document.getElementById('errorBox');
+        const errorMsg = document.getElementById('errorMsg');
+        const errorReload = document.getElementById('errorReload');
+        if(loadingOverlay) loadingOverlay.style.display = 'flex';
+        if(errorBox){ errorBox.classList.remove('hidden'); if(errorMsg) errorMsg.textContent = msg; if(errorReload) errorReload.onclick = ()=> location.reload(); }
+      }catch(_){}
+    };
+
     window.addEventListener('error', (e)=>{
       try{
-        if(e && e.target && e.target.currentSrc){ console.warn('Failed to load resource:', e.target.currentSrc); }
-        else if(e && e.message){ console.warn('Global error:', e.message); }
-      }catch(err){console.warn('error handler failed',err)}
+        if(e && e.target){
+          const t = e.target;
+          const src = t.currentSrc || t.src || t.href || (t.getAttribute && (t.getAttribute('src') || t.getAttribute('href'))) || '(unknown)';
+          const details = `Resource load error: <${t.tagName}> ${src}`;
+          console.warn(details, e);
+          showErrorUI(details + (e && e.message ? '\n' + e.message : ''));
+        } else if(e && e.message){
+          const details = `Script error: ${e.message} ${e.filename||''}:${e.lineno||''}`;
+          console.warn('Global error:', details);
+          showErrorUI(details);
+        }
+      }catch(err){ console.warn('error handler failed',err) }
     }, true);
+
+    window.addEventListener('unhandledrejection', (ev)=>{ try{ console.warn('Unhandled promise rejection', ev.reason); showErrorUI('Unhandled promise rejection: ' + (ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason))); }catch(_){} });
   }
 
   onZoom(e){
@@ -266,6 +304,7 @@ class Game{
     this.createBuildingDOM(id,inst);
     // apply bonuses
     this.applyBonuses(def.bonuses,true);
+  this.logAction(`Построено ${def.name} на ${cx},${cy}`);
     return inst;
   }
 
@@ -288,7 +327,8 @@ class Game{
     // remove DOM
     const el=this.gridEl.querySelector(`[data-id="${inst.id}"]`); if(el){el.classList.add('building-remove'); setTimeout(()=>el.remove(),350)}
     delete this.buildings[inst.id];
-    this.renderResources();
+  this.logAction(`Уничтожено ${inst.def.name}`);
+  this.renderResources();
   }
 
   applyBonuses(bonuses,apply=true){ if(!bonuses) return; for(const k in bonuses){ if(k==='maxPopulation'){ if(apply) this.resources.maxPeople += bonuses[k]; else this.resources.maxPeople -= bonuses[k]; } else if(k==='foodProduction'){ if(apply) this.resources.food += bonuses[k]; else this.resources.food -= bonuses[k]; } else if(k==='ironProduction'){ if(apply) this.resources.iron += bonuses[k]; else this.resources.iron -= bonuses[k]; } }
@@ -347,10 +387,13 @@ class Game{
 
   save(){ const data={grid:this.gridData,buildings:this.buildings,resources:this.resources,pop:this.population,cityLevel:this.cityLevel}; localStorage.setItem('mdg_save',JSON.stringify(data)); alert('Сохранено в localStorage'); }
   load(){ const raw=localStorage.getItem('mdg_save'); if(!raw){alert('Нет сохранения');return} const data=JSON.parse(raw); this.gridData=data.grid; this.buildings=data.buildings; this.resources=data.resources; this.population=data.pop; this.cityLevel=data.cityLevel; // DOM rebuild
-    this.renderGrid(); this.renderResources(); alert('Загружено'); }
+  this.renderGrid(); this.renderResources(); this.logAction('Загрузка сохранения'); alert('Загружено'); }
 
-  openMissions(){ this.battleModal.classList.remove('hidden'); this.startBattle(); }
-  closeBattle(){ this.battleModal.classList.add('hidden'); }
+  // original open/close removed in favor of logged versions below
+
+  // add logs for missions open/close
+  openMissions(){ this.logAction('Открыты миссии'); this.battleModal.classList.remove('hidden'); this.startBattle(); }
+  closeBattle(){ this.logAction('Закрыты миссии'); this.battleModal.classList.add('hidden'); }
 
   startBattle(){ // build simple 15x15 battle grid and populate with sample units
     this.battleGrid.innerHTML=''; this.battleLog.textContent='Начало миссии';

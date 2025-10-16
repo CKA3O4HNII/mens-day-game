@@ -90,3 +90,8 @@ body{margin:0;font-family:Inter,Segoe UI,Arial;background:linear-gradient(180deg
 #errorTitle{font-weight:700;margin-bottom:8px}
 #errorMsg{white-space:pre-wrap;max-height:200px;overflow:auto}
 #errorReload{margin-top:8px}
+
+/* action log */
+.action-log{position:fixed;left:12px;bottom:12px;width:320px;max-height:40vh;overflow:auto;background:rgba(0,0,0,0.6);padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);font-size:12px}
+.action-log .entry{padding:6px;border-bottom:1px solid rgba(255,255,255,0.02);color:#dbeafe}
+.action-log .entry.time{color:#9ca3af;font-size:11px}

@@ -79,3 +79,14 @@ body{margin:0;font-family:Inter,Segoe UI,Arial;background:linear-gradient(180deg
 
 /* responsive */
 @media(max-width:600px){:root{--cell-size:28px}#topbar h1{font-size:14px}}
+
+/* loading overlay */
+#loadingOverlay{position:fixed;inset:0;background:linear-gradient(180deg,rgba(2,6,23,0.9),rgba(2,6,23,0.95));display:flex;align-items:center;justify-content:center;z-index:10000;color:#fff}
+.loader{display:flex;flex-direction:column;align-items:center;gap:12px}
+.spinner{width:48px;height:48px;border-radius:50%;border:5px solid rgba(255,255,255,0.08);border-top-color:var(--accent);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-text{font-size:16px}
+#errorBox{margin-top:16px;background:rgba(0,0,0,0.6);padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);max-width:80vw}
+#errorTitle{font-weight:700;margin-bottom:8px}
+#errorMsg{white-space:pre-wrap;max-height:200px;overflow:auto}
+#errorReload{margin-top:8px}

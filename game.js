@@ -363,11 +363,27 @@ class Game{
 
 // Initialize the game after DOM ready and after loading data.json. Use fetch with fallback.
 document.addEventListener('DOMContentLoaded', async ()=>{
-  const game = new Game();
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  const errorBox = document.getElementById('errorBox');
+  const errorMsg = document.getElementById('errorMsg');
+  const errorReload = document.getElementById('errorReload');
   try{
-    const resp = await fetch('data.json', {cache: 'no-store'});
-    if(resp.ok){ const data = await resp.json(); game.initWithData(data); }
-    else { console.warn('data.json fetch failed, using fallback data'); game.initWithData(FALLBACK_DATA); }
-  }catch(err){ console.warn('failed to load data.json, using fallback', err); game.initWithData(FALLBACK_DATA); }
-  window.game = game;
+    const game = new Game();
+    // install global resource error handler and show overlay until init complete
+    game.installGlobalErrorHandler();
+    try{
+      const resp = await fetch('data.json', {cache: 'no-store'});
+      if(resp.ok){ const data = await resp.json(); game.initWithData(data); }
+      else { console.warn('data.json fetch failed, using fallback data'); game.initWithData(FALLBACK_DATA); }
+    }catch(err){ console.warn('failed to load data.json, using fallback', err); game.initWithData(FALLBACK_DATA); }
+    window.game = game;
+    // hide loading overlay after short delay so UI visible
+    setTimeout(()=>{ if(loadingOverlay) loadingOverlay.style.display='none'; }, 300);
+  }catch(initErr){
+    console.error('Fatal init error', initErr);
+    if(loadingOverlay) loadingOverlay.style.display='flex';
+    if(errorBox && errorMsg){ errorBox.classList.remove('hidden'); errorMsg.textContent = (initErr && initErr.stack) ? initErr.stack : String(initErr); }
+    if(errorReload) errorReload.onclick = ()=> location.reload();
+  }
+  // end DOMContentLoaded
 });

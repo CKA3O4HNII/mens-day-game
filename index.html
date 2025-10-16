@@ -44,6 +44,19 @@
 
   <div id="placementHint" class="hidden">Режим размещения: выберите клетку на карте или нажмите «Отменить размещение»</div>
 
+  <!-- Loading / error overlay -->
+  <div id="loadingOverlay">
+    <div class="loader">
+      <div class="spinner"></div>
+      <div class="loader-text">Загрузка игры...</div>
+    </div>
+    <div id="errorBox" class="hidden">
+      <div id="errorTitle">Ошибка загрузки</div>
+      <pre id="errorMsg"></pre>
+      <button id="errorReload">Перезагрузить</button>
+    </div>
+  </div>
+
   <!-- Battle modal / view -->
   <div id="battleModal" class="hidden">
     <div id="battleUI">

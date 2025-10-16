@@ -46,9 +46,9 @@ class Game{
     this.viewW=0;this.viewH=0;this.offsetX=0;this.offsetY=0;this.scale=1;
     this.gridData=new Array(this.gridW*this.gridH).fill(null); // store building id or null
     this.buildings={};// id->instance
-    this.resources={wood:100,stone:100,iron:100,people:0,maxPeople:100,food:0,water:0}
-    this.populationTimer=null;this.productionTimer=null;
-    this.cityLevel=1;this.population=0;
+  this.resources={wood:100,stone:100,iron:100,people:10,maxPeople:100,food:0,water:0}
+  this.populationTimer=null;this.productionTimer=null;
+  this.cityLevel=1;this.population=10; // start with small population to avoid 0/0 UX
     this.units=[];
     // defs will be set via initWithData after data.json is loaded (avoids import assert issues)
     this.buildingDefs=[];this.unitDefs=[];
@@ -84,8 +84,9 @@ class Game{
 
   startDragPlacement(ev, idx, entryEl){
     const def=this.buildingDefs[idx]; if(!def) return;
-    // create ghost element that follows cursor
-    this.ghost = document.createElement('div'); this.ghost.className='ghost-building'; this.ghost.textContent = def.name; document.body.appendChild(this.ghost);
+  console.log('startDragPlacement', idx, def.name, ev.type);
+  // create ghost element that follows cursor
+  this.ghost = document.createElement('div'); this.ghost.className='ghost-building'; this.ghost.textContent = def.name; document.body.appendChild(this.ghost);
     this.placingDef = def;
   // pointer capture for reliability
   try{ entryEl.setPointerCapture(ev.pointerId); }catch(e){}
@@ -105,7 +106,8 @@ class Game{
   }
 
   endDrag(ev){
-    if(this.ghost){ this.ghost.remove(); this.ghost=null; }
+  console.log('endDrag', ev && ev.type);
+  if(this.ghost){ this.ghost.remove(); this.ghost=null; }
   try{ if(ev && ev.pointerId) { /* nothing */ } }catch(e){}
     const pos=this.worldToCell(ev.clientX, ev.clientY);
     if(this.placingDef && this.canAfford(this.placingDef.cost) && this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy)){
@@ -117,15 +119,12 @@ class Game{
 
   updatePlacementPreview(cx, cy){
     this.clearPlacementPreview(); if(!this.placingDef) return; const shape=this.placingDef.shape;
-    const valid = this.canPlaceShape(shape,cx,cy);
-    // create a preview overlay sized to bounding box
-    const minX= Math.min(...shape.map(s=>s%3)); const maxX=Math.max(...shape.map(s=>s%3)); const minY=Math.min(...shape.map(s=>Math.floor(s/3))); const maxY=Math.max(...shape.map(s=>Math.floor(s/3)));
-    const width = (maxX-minX+1)*this.cellSize; const height=(maxY-minY+1)*this.cellSize;
-    const left = (cx + minX -1)*this.cellSize; const top = (cy + minY -1)*this.cellSize;
-    const preview=document.createElement('div'); preview.className = 'preview-cell '+(valid? 'preview-valid':'preview-invalid'); preview.style.left = left+'px'; preview.style.top = top+'px'; preview.style.width = width+'px'; preview.style.height = height+'px'; this.gridEl.appendChild(preview); this._lastPreview = preview;
+    // draw per-cell preview for exact shape
+    this._previewCells = [];
+    for(const s of shape){ const dx=(s%3)-1; const dy=Math.floor(s/3)-1; const x=cx+dx; const y=cy+dy; const validCell = (x>=0 && y>=0 && x<this.gridW && y<this.gridH && !this.gridData[y*this.gridW+x]); const pc=document.createElement('div'); pc.className = 'preview-cell '+(validCell? 'preview-valid':'preview-invalid'); pc.style.left = (x*this.cellSize)+'px'; pc.style.top = (y*this.cellSize)+'px'; pc.style.width = this.cellSize+'px'; pc.style.height = this.cellSize+'px'; this.gridEl.appendChild(pc); this._previewCells.push(pc); }
   }
 
-  clearPlacementPreview(){ if(this._lastPreview){ this._lastPreview.remove(); this._lastPreview=null; } }
+  clearPlacementPreview(){ if(this._lastPreview){ this._lastPreview.remove(); this._lastPreview=null; } if(this._previewCells){ this._previewCells.forEach(c=>c.remove()); this._previewCells=null; } }
 
   selectBuildingForPlace(idx){
     const def=this.buildingDefs[idx]; if(!def) return; this.placingDef=def;
@@ -149,11 +148,27 @@ class Game{
   document.addEventListener('wheel', (e)=>{e.preventDefault();this.onZoom(e)} ,{passive:false});
   document.addEventListener('keydown',(e)=>this.onKey(e));
   if(this.gridContainer) this.gridContainer.addEventListener('click', (e)=>this.onGridClick(e)); else console.warn('attachEvents: missing gridContainer');
+    // update preview on move when user selected a building
+    if(this.gridContainer) {
+      this.gridContainer.addEventListener('pointermove', (e)=>{ if(this.placingDef) { const pos=this.worldToCell(e.clientX,e.clientY); this.updatePlacementPreview(pos.cx,pos.cy); } });
+      this.gridContainer.addEventListener('mousemove', (e)=>{ if(this.placingDef) { const pos=this.worldToCell(e.clientX,e.clientY); this.updatePlacementPreview(pos.cx,pos.cy); } });
+      this.gridContainer.addEventListener('touchmove', (e)=>{ if(this.placingDef){ const t = e.touches[0]; const pos=this.worldToCell(t.clientX,t.clientY); this.updatePlacementPreview(pos.cx,pos.cy); } }, {passive:true});
+    }
   if(this.saveBtn) this.saveBtn.addEventListener('click', ()=>this.save()); else console.warn('attachEvents: missing saveBtn');
   if(this.loadBtn) this.loadBtn.addEventListener('click', ()=>this.load()); else console.warn('attachEvents: missing loadBtn');
   if(this.missionsBtn) this.missionsBtn.addEventListener('click', ()=>this.openMissions()); else console.warn('attachEvents: missing missionsBtn');
   const closeBtn = document.getElementById('closeBattle'); if(closeBtn) closeBtn.addEventListener('click',()=>this.closeBattle()); else console.warn('attachEvents: missing closeBattle');
   window.addEventListener('resize', ()=>this.renderGrid());
+  }
+
+  // global error logging for missing media/resource URIs
+  installGlobalErrorHandler(){
+    window.addEventListener('error', (e)=>{
+      try{
+        if(e && e.target && e.target.currentSrc){ console.warn('Failed to load resource:', e.target.currentSrc); }
+        else if(e && e.message){ console.warn('Global error:', e.message); }
+      }catch(err){console.warn('error handler failed',err)}
+    }, true);
   }
 
   onZoom(e){

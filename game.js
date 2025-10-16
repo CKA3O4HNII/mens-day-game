@@ -234,6 +234,16 @@ class Game{
         if(e && e.target){
           const t = e.target;
           const src = t.currentSrc || t.src || t.href || (t.getAttribute && (t.getAttribute('src') || t.getAttribute('href'))) || '(unknown)';
+          // Some browsers create an internal <audio> (audio.audio-for-speech) for TTS and set its src to the page root.
+          // That shows up as a resource load error but is harmless. Ignore that specific case to avoid showing the fatal overlay.
+          try{
+            const pageUrl = (location && location.href) ? location.href.split('#')[0] : '';
+            const pageRoot = (location && location.origin && location.pathname) ? (location.origin + location.pathname) : '';
+            if((t.tagName === 'AUDIO' && (src === pageUrl || src === pageRoot || src === (location && location.origin + '/'))) ){
+              console.info('Ignored benign audio resource load for speech:', src);
+              return; // don't show overlay for this benign browser-created audio
+            }
+          }catch(_){ }
           const details = `Resource load error: <${t.tagName}> ${src}`;
           console.warn(details, e);
           showErrorUI(details + (e && e.message ? '\n' + e.message : ''));

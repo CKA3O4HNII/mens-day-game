@@ -1,7 +1,32 @@
 // game.js - main logic (ES module)
 // Keep code defensive and modular. Initializes after DOMContentLoaded.
+// NOTE: older browsers and some file:// contexts don't support `import ... assert { type: 'json' }`.
+// Load data.json at runtime via fetch with a fallback to avoid syntax errors.
 
-import DATA from './data.json' assert { type: 'json' };
+const FALLBACK_DATA = {
+  "buildings": [
+    {"name":"Дом v1","cost":{"wood":20},"shape":[0,1,3,4],"bonuses":{"maxPopulation":5},"requiredLevel":1},
+    {"name":"Дом v2","cost":{"wood":50,"stone":20},"shape":[0,1,2,3,4,5],"bonuses":{"maxPopulation":10},"requiredLevel":2},
+    {"name":"Академия","cost":{"wood":50,"stone":20,"iron":10},"shape":[0,1,2,3,4],"bonuses":{"researchMenu":true},"requiredLevel":1},
+    {"name":"Казарма v1","cost":{"wood":20,"iron":10},"shape":[0,1,2,3,4,5],"bonuses":{"armyStorage":20},"requiredLevel":1},
+    {"name":"Ферма v1","cost":{"wood":30},"shape":[1,2,4,5,7,8],"bonuses":{"foodProduction":10},"requiredLevel":1},
+    {"name":"Ферма v2","cost":{"wood":60,"stone":20},"shape":[0,1,2,3,4,5,6,7,8],"bonuses":{"foodProduction":30},"requiredLevel":2},
+    {"name":"Шахта v1","cost":{"stone":30,"iron":10},"shape":[3,4,5,6,7,8],"bonuses":{"ironProduction":5},"requiredLevel":1},
+    {"name":"Шахта v2","cost":{"stone":80,"iron":40},"shape":[0,1,2,3,4,5,6,7,8],"bonuses":{"ironProduction":20},"requiredLevel":2},
+    {"name":"Колодец","cost":{"stone":15},"shape":[4],"bonuses":{"water":10},"requiredLevel":1},
+    {"name":"Пожарная станция","cost":{"wood":40,"stone":20},"shape":[0,1,3,4],"bonuses":{"fireProtection":true},"requiredLevel":3}
+  ],
+  "units": [
+    {"name":"Отряд солдат v1","cost":{"people":50},"move":2,"range":5,"dmgMin":0,"dmgMax":50,"hp":[40,50],"arrivalTurns":1,"requiredLevel":1},
+    {"name":"Элитный отряд v2","cost":{"people":50,"iron":20},"move":3,"range":7,"dmgMin":20,"dmgMax":50,"hp":[50,50],"arrivalTurns":3,"requiredLevel":2},
+    {"name":"Танковый взвод","cost":{"people":500,"iron":150},"move":7,"range":15,"dmgMin":250,"dmgMax":250,"hp":[1000,1000],"arrivalTurns":10,"requiredLevel":2},
+    {"name":"Артиллерия","cost":{"people":200,"iron":100},"move":1,"range":20,"dmgMin":100,"dmgMax":300,"hp":[200,200],"arrivalTurns":5,"requiredLevel":3},
+    {"name":"Рокетчики","cost":{"people":100,"iron":50},"move":4,"range":10,"dmgMin":50,"dmgMax":150,"hp":[30,30],"arrivalTurns":4,"requiredLevel":2},
+    {"name":"Самолеты","cost":{"people":300,"iron":200},"move":10,"range":15,"dmgMin":200,"dmgMax":400,"hp":[150,150],"arrivalTurns":8,"requiredLevel":4},
+    {"name":"ПВО","cost":{"people":150,"iron":100},"move":1,"range":12,"dmgMin":100,"dmgMax":200,"hp":[250,250],"arrivalTurns":6,"requiredLevel":3},
+    {"name":"Робот-артиллерия","cost":{"iron":100},"move":1,"range":18,"dmgMin":80,"dmgMax":220,"hp":[150,200],"arrivalTurns":0,"requiredLevel":1}
+  ]
+};
 
 class Vec2{constructor(x,y){this.x=x;this.y=y}}
 
@@ -25,9 +50,17 @@ class Game{
     this.populationTimer=null;this.productionTimer=null;
     this.cityLevel=1;this.population=0;
     this.units=[];
-    this.buildingDefs=DATA.buildings.map(b=>new BuildingDef(b));
-    this.unitDefs=DATA.units.map(u=>new UnitDef(u));
+    // defs will be set via initWithData after data.json is loaded (avoids import assert issues)
+    this.buildingDefs=[];this.unitDefs=[];
     this.initDOM();this.attachEvents();this.startTimers();this.renderResources();this.renderGrid();
+  }
+
+  initWithData(data){
+    const D = data || FALLBACK_DATA;
+    this.buildingDefs = (D.buildings||[]).map(b=>new BuildingDef(b));
+    this.unitDefs = (D.units||[]).map(u=>new UnitDef(u));
+    // refresh UI
+    this.renderGrid();this.renderResources();
   }
 
   initDOM(){
@@ -198,4 +231,13 @@ class Game{
   }
 }
 
-document.addEventListener('DOMContentLoaded', ()=>{window.game=new Game();});
+// Initialize the game after DOM ready and after loading data.json. Use fetch with fallback.
+document.addEventListener('DOMContentLoaded', async ()=>{
+  const game = new Game();
+  try{
+    const resp = await fetch('data.json', {cache: 'no-store'});
+    if(resp.ok){ const data = await resp.json(); game.initWithData(data); }
+    else { console.warn('data.json fetch failed, using fallback data'); game.initWithData(FALLBACK_DATA); }
+  }catch(err){ console.warn('failed to load data.json, using fallback', err); game.initWithData(FALLBACK_DATA); }
+  window.game = game;
+});

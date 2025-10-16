@@ -73,9 +73,11 @@ class Game{
       const name=document.createElement('div');name.textContent=b.name;
       const cost=document.createElement('div');cost.className='cost';cost.textContent=Object.entries(b.cost||{}).map(kv=>kv[0]+':'+kv[1]).join(', ');
       entry.appendChild(name);entry.appendChild(cost);
-      entry.addEventListener('click', ()=>{ this.selectBuildingForPlace(idx); });
-      // drag start for pointer events
-      entry.addEventListener('pointerdown', (ev)=>{ ev.preventDefault(); this.startDragPlacement(ev, idx, entry); });
+  entry.addEventListener('click', ()=>{ this.selectBuildingForPlace(idx); });
+  // drag start for pointer events; add fallbacks and logs
+  entry.addEventListener('pointerdown', (ev)=>{ console.log('pointerdown on entry', idx); ev.preventDefault(); this.startDragPlacement(ev, idx, entry); });
+  entry.addEventListener('mousedown', (ev)=>{ console.log('mousedown fallback on entry', idx); ev.preventDefault(); this.startDragPlacement(ev, idx, entry); });
+  entry.addEventListener('touchstart', (ev)=>{ console.log('touchstart fallback on entry', idx); ev.preventDefault(); this.startDragPlacement(ev.changedTouches ? ev.changedTouches[0] : ev, idx, entry); }, {passive:false});
       listEl.appendChild(entry);
     });
   }
@@ -143,14 +145,15 @@ class Game{
   }
 
   attachEvents(){
-    document.addEventListener('wheel', (e)=>{e.preventDefault();this.onZoom(e)} ,{passive:false});
-    document.addEventListener('keydown',(e)=>this.onKey(e));
-    this.gridContainer.addEventListener('click', (e)=>this.onGridClick(e));
-    this.saveBtn.addEventListener('click', ()=>this.save());
-    this.loadBtn.addEventListener('click', ()=>this.load());
-    this.missionsBtn.addEventListener('click', ()=>this.openMissions());
-    document.getElementById('closeBattle').addEventListener('click',()=>this.closeBattle());
-    window.addEventListener('resize', ()=>this.renderGrid());
+  console.log('attachEvents: wiring UI events');
+  document.addEventListener('wheel', (e)=>{e.preventDefault();this.onZoom(e)} ,{passive:false});
+  document.addEventListener('keydown',(e)=>this.onKey(e));
+  if(this.gridContainer) this.gridContainer.addEventListener('click', (e)=>this.onGridClick(e)); else console.warn('attachEvents: missing gridContainer');
+  if(this.saveBtn) this.saveBtn.addEventListener('click', ()=>this.save()); else console.warn('attachEvents: missing saveBtn');
+  if(this.loadBtn) this.loadBtn.addEventListener('click', ()=>this.load()); else console.warn('attachEvents: missing loadBtn');
+  if(this.missionsBtn) this.missionsBtn.addEventListener('click', ()=>this.openMissions()); else console.warn('attachEvents: missing missionsBtn');
+  const closeBtn = document.getElementById('closeBattle'); if(closeBtn) closeBtn.addEventListener('click',()=>this.closeBattle()); else console.warn('attachEvents: missing closeBattle');
+  window.addEventListener('resize', ()=>this.renderGrid());
   }
 
   onZoom(e){

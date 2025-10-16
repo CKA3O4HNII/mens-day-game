@@ -16,20 +16,34 @@
         <button id="missionsBtn">Миссии</button>
       </div>
     </div>
-    <div id="info">
-      <div id="resources">Загрузка...</div>
-      <div id="cityStats"></div>
+    <div id="ui">
+      <div id="topbar">
+        <h1>Мужской Альянс: Эпоха Стали и Огня</h1>
+        <div id="topCounters">
+          <div class="counter" id="counterWood">Дерево: <span class="val">0</span></div>
+          <div class="counter" id="counterStone">Камень: <span class="val">0</span></div>
+          <div class="counter" id="counterIron">Железо: <span class="val">0</span></div>
+          <div class="counter" id="counterPop">Люди: <span class="val">0</span></div>
+          <div class="counter" id="counterCity">Город: <span class="val">L1</span></div>
+        </div>
+        <div id="controls">
+          <button id="saveBtn">Сохранить</button>
+          <button id="loadBtn">Загрузить</button>
+          <button id="missionsBtn">Миссии</button>
+        </div>
+      </div>
     </div>
-  </div>
 
-  <div id="game">
-    <div id="gridContainer">
-      <div id="grid"></div>
-    </div>
-  </div>
-
-  <!-- Battle modal / view -->
-  <div id="battleModal" class="hidden">
+    <aside id="sidebar">
+      <div id="sidebarHeader">Постройки</div>
+      <div id="buildingList" role="list"></div>
+      <div id="buildingInfo">
+        <h3 id="biName">Выберите здание</h3>
+        <div id="biCost" class="small"></div>
+        <div id="biBonuses" class="small"></div>
+        <button id="cancelPlace" class="small hidden">Отменить размещение</button>
+      </div>
+    </aside>
     <div id="battleUI">
       <button id="closeBattle">Закрыть миссию</button>
       <div id="battleGrid"></div>

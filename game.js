@@ -52,6 +52,7 @@ class Game{
     this.units=[];
     // defs will be set via initWithData after data.json is loaded (avoids import assert issues)
     this.buildingDefs=[];this.unitDefs=[];
+  this.placingDef = null; // currently selected building for placement
     this.initDOM();this.attachEvents();this.startTimers();this.renderResources();this.renderGrid();
   }
 
@@ -61,6 +62,27 @@ class Game{
     this.unitDefs = (D.units||[]).map(u=>new UnitDef(u));
     // refresh UI
     this.renderGrid();this.renderResources();
+    this.populateSidebar();
+  }
+
+  populateSidebar(){
+    const listEl = document.getElementById('buildingList'); if(!listEl) return; listEl.innerHTML='';
+    this.buildingDefs.forEach((b,idx)=>{
+      if(b.requiredLevel>this.cityLevel) return; // hide locked
+      const entry=document.createElement('div');entry.className='building-entry';entry.dataset.idx=idx;
+      const name=document.createElement('div');name.textContent=b.name;
+      const cost=document.createElement('div');cost.className='cost';cost.textContent=Object.entries(b.cost||{}).map(kv=>kv[0]+':'+kv[1]).join(', ');
+      entry.appendChild(name);entry.appendChild(cost);
+      entry.addEventListener('click', ()=>{ this.selectBuildingForPlace(idx); });
+      listEl.appendChild(entry);
+    });
+  }
+
+  selectBuildingForPlace(idx){
+    const def=this.buildingDefs[idx]; if(!def) return; this.placingDef=def;
+    const biName=document.getElementById('biName'); const biCost=document.getElementById('biCost'); const biBonuses=document.getElementById('biBonuses'); const cancel=document.getElementById('cancelPlace');
+    if(biName) biName.textContent = def.name; if(biCost) biCost.textContent = 'Стоимость: '+JSON.stringify(def.cost); if(biBonuses) biBonuses.textContent = 'Бонусы: '+JSON.stringify(def.bonuses||{});
+    if(cancel){ cancel.classList.remove('hidden'); cancel.onclick = ()=>{ this.placingDef=null; cancel.classList.add('hidden'); if(biName) biName.textContent='Выберите здание'; } }
   }
 
   initDOM(){
@@ -113,14 +135,9 @@ class Game{
       const info = `${inst.def.name}\nBonuses: ${JSON.stringify(inst.def.bonuses)}`;
       if(confirm(info + '\nУничтожить?')){this.demolishBuilding(inst)}
     } else {
-      // empty: offer build menu via prompt
-      const options=this.buildingDefs.filter(b=>b.requiredLevel<=this.cityLevel);
-      const list=options.map((b,i)=>`${i}: ${b.name} (cost ${JSON.stringify(b.cost)})`).join('\n');
-      const choice = prompt('Выберите постройку (индекс) или отмена:\n'+list);
-      const idxChoice=parseInt(choice);
-      if(!isNaN(idxChoice)&&options[idxChoice]){
-        const def=options[idxChoice]; if(this.canAfford(def.cost) && this.canPlaceShape(def.shape,pos.cx,pos.cy)){ this.spend(def.cost); this.placeBuilding(def,pos.cx,pos.cy); } else { alert('Невозможно построить здесь или недостаточно ресурсов.'); }
-      }
+      // empty cell: if user selected a building from sidebar, place it here
+      if(this.placingDef){ const def=this.placingDef; if(this.canAfford(def.cost) && this.canPlaceShape(def.shape,pos.cx,pos.cy)){ this.spend(def.cost); this.placeBuilding(def,pos.cx,pos.cy); this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden'); const biName=document.getElementById('biName'); if(biName) biName.textContent='Выберите здание'; } else { alert('Невозможно построить здесь или недостаточно ресурсов.'); } }
+      // otherwise click does nothing
     }
     this.renderResources();
   }
@@ -194,7 +211,13 @@ class Game{
   }
 
   renderResources(){
-    this.resourcesEl.textContent = `Ресурсы — Дерево: ${this.resources.wood}  Камень: ${this.resources.stone}  Железо: ${this.resources.iron}  Люди: ${this.population}/${this.resources.maxPeople}  Город: L${this.cityLevel}`;
+  // legacy info area
+  this.resourcesEl && (this.resourcesEl.textContent = `Ресурсы — Дерево: ${this.resources.wood}  Камень: ${this.resources.stone}  Железо: ${this.resources.iron}`);
+  const cw=document.getElementById('counterWood'); if(cw) cw.querySelector('.val').textContent = this.resources.wood;
+  const cs=document.getElementById('counterStone'); if(cs) cs.querySelector('.val').textContent = this.resources.stone;
+  const ci=document.getElementById('counterIron'); if(ci) ci.querySelector('.val').textContent = this.resources.iron;
+  const cp=document.getElementById('counterPop'); if(cp) cp.querySelector('.val').textContent = `${this.population}/${this.resources.maxPeople}`;
+  const cl=document.getElementById('counterCity'); if(cl) cl.querySelector('.val').textContent = `L${this.cityLevel}`;
   }
 
   renderGrid(){

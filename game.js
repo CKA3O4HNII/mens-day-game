@@ -172,6 +172,22 @@ class Game{
   try{ if(this._onPointerMove) document.removeEventListener('pointermove', this._onPointerMove); if(this._onPointerUp) document.removeEventListener('pointerup', this._onPointerUp); }catch(_){}
   if(this.ghost){ try{ this.ghost.remove(); }catch(_){} this.ghost=null; }
   try{ const cx = ev && (ev.clientX || (ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientX)) || 0; const cy = ev && (ev.clientY || (ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientY)) || 0; console.debug('endDrag final coords', {cx,cy}); const pos=this.worldToCell(cx,cy); if(this.placingDef && this.canAfford(this.placingDef.cost) && this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy)){ this.spend(this.placingDef.cost); this.placeBuilding(this.placingDef,pos.cx,pos.cy); } }catch(err){ console.warn('placement error at endDrag',err); }
+  if(this.ghost){ try{ this.ghost.remove(); }catch(_){} this.ghost=null; }
+  try{
+    const cx = ev && (ev.clientX || (ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientX)) || 0;
+    const cy = ev && (ev.clientY || (ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientY)) || 0;
+    console.debug('endDrag final coords', {cx,cy});
+    const pos=this.worldToCell(cx,cy);
+    if(!this.placingDef){ console.debug('endDrag: no placingDef, abort'); }
+    else {
+      const afford = this.canAfford(this.placingDef.cost);
+      const placeable = this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy);
+      console.debug('endDrag placement check', { name: this.placingDef.name, pos, afford, placeable });
+      this.logAction(`Placement attempt: ${this.placingDef.name} at ${pos.cx},${pos.cy} afford:${afford} placeable:${placeable}`);
+      if(afford && placeable){ this.spend(this.placingDef.cost); this.placeBuilding(this.placingDef,pos.cx,pos.cy); }
+      else { console.warn('endDrag: cannot place', {afford, placeable, pos}); }
+    }
+  }catch(err){ console.warn('placement error at endDrag',err); }
     try{ this.clearPlacementPreview(); }catch(_){}
     this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden');
     this.renderResources();
@@ -266,7 +282,11 @@ class Game{
           if(e.clientX<rect.left || e.clientX>rect.right || e.clientY<rect.top || e.clientY>rect.bottom) return; // clicked outside grid
           const pos=this.worldToCell(e.clientX,e.clientY);
           if(pos.cx<0||pos.cy<0) return;
-          if(this.canAfford(this.placingDef.cost) && this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy)){
+          const afford = this.canAfford(this.placingDef.cost);
+          const placeable = this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy);
+          console.debug('click-to-place check', {name:this.placingDef.name, pos, afford, placeable});
+          this.logAction(`Click placement attempt: ${this.placingDef.name} at ${pos.cx},${pos.cy} afford:${afford} placeable:${placeable}`);
+          if(afford && placeable){
             this.spend(this.placingDef.cost);
             this.placeBuilding(this.placingDef,pos.cx,pos.cy);
             this.logAction(`Построено ${this.placingDef.name} (click-to-place)`);
@@ -340,15 +360,23 @@ class Game{
   }
 
   worldToCell(clientX,clientY){
-  if(!this.gridEl) return {cx:-1, cy:-1};
-  const rect=this.gridEl.getBoundingClientRect();
-  // rect.left/top already reflect the applied transform (translate + scale).
-  // Invert the transform: mapPixel = (client - rect.left) / scale
-  const mapX = (clientX - rect.left) / this.scale;
-  const mapY = (clientY - rect.top) / this.scale;
+  // Robust mapping: use the visible grid container rect, add the current scroll offset
+  // (this.offsetX/offsetY) and then invert the applied scale. Using gridContainer
+  // makes the mapping stable when the inner grid element is transformed.
+  if(!this.gridEl || !this.gridContainer) return {cx:-1, cy:-1};
+  const crect = this.gridContainer.getBoundingClientRect();
+  // local coordinates inside the container
+  const localX = clientX - crect.left;
+  const localY = clientY - crect.top;
+  // map into the world by adding the current offset (we translate the grid by -offset)
+  const mapX = (localX + this.offsetX) / this.scale;
+  const mapY = (localY + this.offsetY) / this.scale;
   if(!isFinite(mapX) || !isFinite(mapY)) return {cx:-1, cy:-1};
   const cx = Math.floor(mapX / this.cellSize);
   const cy = Math.floor(mapY / this.cellSize);
+  // helpful debug information when placement seems to fail
+  // keep this.debug && console.debug to avoid noisy logs unless debug enabled
+  if(this.debugPlacement) console.debug('worldToCell', {clientX, clientY, localX, localY, mapX, mapY, cx, cy, offsetX:this.offsetX, offsetY:this.offsetY, scale:this.scale});
   return {cx, cy};
   }
 

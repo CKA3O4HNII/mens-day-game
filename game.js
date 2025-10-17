@@ -110,11 +110,13 @@ class Game{
   }
 
   cleanupHtmlDrag(){
-    if(this._htmlDragOver) { document.removeEventListener('dragover', this._htmlDragOver); this._htmlDragOver=null; }
-    if(this._htmlDrop) { document.removeEventListener('drop', this._htmlDrop); this._htmlDrop=null; }
+  if(this._htmlDragOver) { document.removeEventListener('dragover', this._htmlDragOver); this._htmlDragOver=null; }
+  if(this._htmlDrop) { document.removeEventListener('drop', this._htmlDrop); this._htmlDrop=null; }
+  if(this._globalPointerMove){ document.removeEventListener('pointermove', this._globalPointerMove); this._globalPointerMove=null; }
+  if(this._globalPointerUp){ document.removeEventListener('pointerup', this._globalPointerUp); this._globalPointerUp=null; }
   console.log('cleanupHtmlDrag');
   if(this.ghost){ try{ this.ghost.remove(); }catch(_){} this.ghost=null; }
-  try{ this.clearPlacementPreview(); }catch(_){}
+  try{ this.clearPlacementPreview(); }catch(_){ }
   this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden');
   this.renderResources();
   }
@@ -126,14 +128,28 @@ class Game{
   // create ghost element that follows cursor
   this.ghost = document.createElement('div'); this.ghost.className='ghost-building'; this.ghost.textContent = def.name; document.body.appendChild(this.ghost);
     this.placingDef = def;
-  // pointer capture for reliability
+  // pointer capture for reliability and install global handlers so drag works across elements
   try{ if(entryEl && ev && ev.pointerId){ entryEl.setPointerCapture(ev.pointerId); } }catch(e){ console.warn('setPointerCapture failed', e) }
-  const onMove = (e)=>{ console.debug('drag move event', {x: e.clientX, y: e.clientY, pointerId: e.pointerId}); this.updateDrag(e); };
-  const onUp = (e)=>{ console.debug('drag up event', {x: e.clientX, y: e.clientY, pointerId: e.pointerId}); try{ this.endDrag(e); }catch(err){ console.warn('endDrag threw', err) } finally { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); try{ if(entryEl && ev && ev.pointerId) entryEl.releasePointerCapture(ev.pointerId); }catch(err){} } };
-  window.addEventListener('pointermove', onMove);
-  window.addEventListener('pointerup', onUp);
-    // initial pos
-    this.updateDrag(ev);
+  this._globalPointerMove = (e)=>{ try{ this.logDragEvent && this.logDragEvent('pointermove', e); this.updateDrag(e); }catch(err){} };
+  this._globalPointerUp = (e)=>{ try{ this.logDragEvent && this.logDragEvent('pointerup', e); this.endDrag(e); }catch(err){} };
+  document.addEventListener('pointermove', this._globalPointerMove);
+  document.addEventListener('pointerup', this._globalPointerUp);
+  // set initial preview position
+  this.updateDrag(ev);
+  }
+
+  // Attempt placement helper: returns {ok:boolean, reason:string}
+  attemptPlacementAt(cx, cy){
+    if(!this.placingDef) return {ok:false, reason:'no_def'};
+    if(cx<0||cy<0||cx>=this.gridW||cy>=this.gridH) return {ok:false, reason:'out_of_bounds'};
+    const afford = this.canAfford(this.placingDef.cost);
+    const placeable = this.canPlaceShape(this.placingDef.shape, cx, cy);
+    if(!afford) return {ok:false, reason:'no_resources'};
+    if(!placeable) return {ok:false, reason:'blocked'};
+    // perform placement
+    this.spend(this.placingDef.cost);
+    const inst = this.placeBuilding(this.placingDef, cx, cy);
+    return {ok:true, instance:inst};
   }
 
   // on-screen drag/pointer debug HUD
@@ -168,10 +184,9 @@ class Game{
   endDrag(ev){
   console.debug('endDrag', {clientX: ev && ev.clientX, clientY: ev && ev.clientY, pointerId: ev && ev.pointerId});
   this.logAction(`Drag end`);
-  // remove potential global listeners
-  try{ if(this._onPointerMove) document.removeEventListener('pointermove', this._onPointerMove); if(this._onPointerUp) document.removeEventListener('pointerup', this._onPointerUp); }catch(_){}
-  if(this.ghost){ try{ this.ghost.remove(); }catch(_){} this.ghost=null; }
-  try{ const cx = ev && (ev.clientX || (ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientX)) || 0; const cy = ev && (ev.clientY || (ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientY)) || 0; console.debug('endDrag final coords', {cx,cy}); const pos=this.worldToCell(cx,cy); if(this.placingDef && this.canAfford(this.placingDef.cost) && this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy)){ this.spend(this.placingDef.cost); this.placeBuilding(this.placingDef,pos.cx,pos.cy); } }catch(err){ console.warn('placement error at endDrag',err); }
+  // cleanup global handlers installed by startDragPlacement
+  try{ if(this._globalPointerMove){ document.removeEventListener('pointermove', this._globalPointerMove); this._globalPointerMove=null; } if(this._globalPointerUp){ document.removeEventListener('pointerup', this._globalPointerUp); this._globalPointerUp=null; } }catch(_){ }
+  // remove ghost
   if(this.ghost){ try{ this.ghost.remove(); }catch(_){} this.ghost=null; }
   try{
     const cx = ev && (ev.clientX || (ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientX)) || 0;
@@ -180,17 +195,15 @@ class Game{
     const pos=this.worldToCell(cx,cy);
     if(!this.placingDef){ console.debug('endDrag: no placingDef, abort'); }
     else {
-      const afford = this.canAfford(this.placingDef.cost);
-      const placeable = this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy);
-      console.debug('endDrag placement check', { name: this.placingDef.name, pos, afford, placeable });
-      this.logAction(`Placement attempt: ${this.placingDef.name} at ${pos.cx},${pos.cy} afford:${afford} placeable:${placeable}`);
-      if(afford && placeable){ this.spend(this.placingDef.cost); this.placeBuilding(this.placingDef,pos.cx,pos.cy); }
-      else { console.warn('endDrag: cannot place', {afford, placeable, pos}); }
+      const res = this.attemptPlacementAt(pos.cx,pos.cy);
+      this.logAction(`Placement attempt: ${this.placingDef.name} at ${pos.cx},${pos.cy} result:${res.ok} reason:${res.reason||'ok'}`);
+      if(!res.ok){ console.warn('endDrag: placement failed', res.reason); }
+      else { this.logAction('Placement succeeded'); }
     }
   }catch(err){ console.warn('placement error at endDrag',err); }
-    try{ this.clearPlacementPreview(); }catch(_){}
-    this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden');
-    this.renderResources();
+  try{ this.clearPlacementPreview(); }catch(_){ }
+  this.placingDef=null; const cancel=document.getElementById('cancelPlace'); if(cancel) cancel.classList.add('hidden');
+  this.renderResources();
   }
 
   updatePlacementPreview(cx, cy){
@@ -241,6 +254,11 @@ class Game{
   // compute grid size
   if(!this.gridEl || !this.gridContainer){ console.error('Missing #grid or #gridContainer in DOM. Ensure index.html layout matches expected IDs.'); return; }
   this.gridEl.style.width=(this.gridW*this.cellSize)+'px';this.gridEl.style.height=(this.gridH*this.cellSize)+'px';
+  // quick debug toggle for placement mapping
+  try{
+    const dbg = document.createElement('button'); dbg.id='placementDebugToggle'; dbg.textContent='Placement Debug: OFF'; dbg.style.position='fixed'; dbg.style.left='8px'; dbg.style.bottom='8px'; dbg.style.zIndex=99999; dbg.style.padding='6px'; dbg.style.fontSize='12px'; document.body.appendChild(dbg);
+    dbg.addEventListener('click', ()=>{ this.debugPlacement = !this.debugPlacement; dbg.textContent = 'Placement Debug: ' + (this.debugPlacement ? 'ON':'OFF'); });
+  }catch(_){ }
   }
 
   attachEvents(){

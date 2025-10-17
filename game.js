@@ -252,6 +252,13 @@ class Game{
   try{
     const dbg = document.createElement('button'); dbg.id='placementDebugToggle'; dbg.textContent='Placement Debug: OFF'; dbg.style.position='fixed'; dbg.style.left='8px'; dbg.style.bottom='8px'; dbg.style.zIndex=99999; dbg.style.padding='6px'; dbg.style.fontSize='12px'; document.body.appendChild(dbg);
     dbg.addEventListener('click', ()=>{ this.debugPlacement = !this.debugPlacement; dbg.textContent = 'Placement Debug: ' + (this.debugPlacement ? 'ON':'OFF'); });
+  // small developer debug panel to inspect state and dismiss overlays that may block UI
+  const devPanel = document.createElement('div'); devPanel.id = 'devDebugPanel'; devPanel.style.position='fixed'; devPanel.style.left='8px'; devPanel.style.bottom='46px'; devPanel.style.zIndex='99999'; devPanel.style.display='flex'; devPanel.style.gap='6px';
+  const dumpBtn = document.createElement('button'); dumpBtn.textContent='Dump state'; dumpBtn.style.padding='6px'; dumpBtn.style.fontSize='12px';
+  const dismissBtn = document.createElement('button'); dismissBtn.textContent='Dismiss overlay'; dismissBtn.style.padding='6px'; dismissBtn.style.fontSize='12px';
+  dumpBtn.addEventListener('click', ()=>{ try{ console.log('GAME STATE DUMP', {placementMode:this.placementMode, placingDefName:this.placingDef && this.placingDef.name, buildingDefsLen:this.buildingDefs && this.buildingDefs.length, gridChildren: document.querySelectorAll('#buildingList .building-entry').length}); alert('State dumped to console'); }catch(e){console.warn(e)} });
+  dismissBtn.addEventListener('click', ()=>{ try{ const lo=document.getElementById('loadingOverlay'); if(lo) lo.style.display='none'; const eb=document.getElementById('errorBox'); if(eb) eb.classList.add('hidden'); alert('Overlay dismissed'); }catch(e){console.warn(e)} });
+  devPanel.appendChild(dumpBtn); devPanel.appendChild(dismissBtn); document.body.appendChild(devPanel);
   }catch(_){ }
   }
 

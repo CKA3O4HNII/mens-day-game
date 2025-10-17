@@ -78,19 +78,13 @@ class Game{
     const listEl = document.getElementById('buildingList'); if(!listEl) return; listEl.innerHTML='';
     this.buildingDefs.forEach((b,idx)=>{
       if(b.requiredLevel>this.cityLevel) return; // hide locked
-      const entry=document.createElement('div');entry.className='building-entry';entry.dataset.idx=idx;
-      const name=document.createElement('div');name.textContent=b.name;
-      const cost=document.createElement('div');cost.className='cost';cost.textContent=Object.entries(b.cost||{}).map(kv=>kv[0]+':'+kv[1]).join(', ');
-      entry.appendChild(name);entry.appendChild(cost);
-  entry.addEventListener('click', ()=>{ this.logAction(`Выбрана постройка ${b.name}`); this.selectBuildingForPlace(idx); });
-  // drag start for pointer events; add fallbacks and logs
-  entry.addEventListener('pointerdown', (ev)=>{ console.log('pointerdown on entry', idx); ev.preventDefault(); this.startDragPlacement(ev, idx, entry); });
-  entry.addEventListener('mousedown', (ev)=>{ console.log('mousedown fallback on entry', idx); ev.preventDefault(); this.startDragPlacement(ev, idx, entry); });
-  entry.addEventListener('touchstart', (ev)=>{ console.log('touchstart fallback on entry', idx); ev.preventDefault(); this.startDragPlacement(ev.changedTouches ? ev.changedTouches[0] : ev, idx, entry); }, {passive:false});
-      // HTML5 drag fallback for desktop browsers
-      entry.setAttribute('draggable','true');
-      entry.addEventListener('dragstart', (ev)=>{ console.log('dragstart on entry', idx); try{ ev.dataTransfer.setData('text/plain', 'drag'); ev.dataTransfer.effectAllowed='move'; }catch(e){}; this.startHtmlDrag(ev, idx, entry); });
-      entry.addEventListener('dragend', (ev)=>{ console.log('dragend on entry', idx); this.cleanupHtmlDrag(); });
+      const entry=document.createElement('div'); entry.className='building-entry'; entry.dataset.idx=idx;
+      const name=document.createElement('div'); name.textContent=b.name;
+      const cost=document.createElement('div'); cost.className='cost'; cost.textContent=Object.entries(b.cost||{}).map(kv=>kv[0]+':'+kv[1]).join(', ');
+      entry.appendChild(name); entry.appendChild(cost);
+      // Simple click-to-select: clicking the sidebar entry selects the building and enters placement mode
+      entry.addEventListener('click', ()=>{ this.logAction(`Выбрана постройка ${b.name}`); this.selectBuildingForPlace(idx); });
+      // Do NOT attach drag/pointer/touch/dragstart handlers here anymore. Selection is click-only.
       listEl.appendChild(entry);
     });
   }
@@ -220,8 +214,8 @@ class Game{
     const biName=document.getElementById('biName'); const biCost=document.getElementById('biCost'); const biBonuses=document.getElementById('biBonuses'); const cancel=document.getElementById('cancelPlace');
     if(biName) biName.textContent = def.name; if(biCost) biCost.textContent = 'Стоимость: '+JSON.stringify(def.cost); if(biBonuses) biBonuses.textContent = 'Бонусы: '+JSON.stringify(def.bonuses||{});
     if(cancel){ cancel.classList.remove('hidden'); cancel.onclick = ()=>{ this.placingDef=null; cancel.classList.add('hidden'); if(biName) biName.textContent='Выберите здание'; } }
-    this.setPlacementMode(true);
-  // create a preview ghost so the player sees a model while selecting (click-to-place fallback)
+  // enter placement mode and create a ghost element that will follow the cursor
+  this.setPlacementMode(true);
   try{ this.createGhostForDef(def); }catch(_){ }
     // highlight selected in sidebar
     const entries = document.querySelectorAll('.building-entry'); entries.forEach((el)=>el.classList.remove('selected')); const sel = document.querySelector(`.building-entry[data-idx="${idx}"]`); if(sel) sel.classList.add('selected');
@@ -291,28 +285,25 @@ class Game{
         }catch(_){}
       }, {passive:true});
 
-      // click-to-place: global click will attempt to place if player clicked on the grid while in placement mode
+      // click-to-place: left-click on grid places the selected building atomically
       document.addEventListener('click', (e)=>{
         try{
+          // only respond to primary (left) button
+          if(e.button !== 0) return;
           if(!this.placementMode || !this.placingDef) return;
           if(!this.gridContainer) return;
+          // ignore clicks that originate from UI panels (sidebar, buttons)
+          if(e.target && e.target.closest && e.target.closest('.building-entry')) return;
+          if(e.target && e.target.closest && e.target.closest('#buildingList')) return;
           const rect=this.gridContainer.getBoundingClientRect();
           if(e.clientX<rect.left || e.clientX>rect.right || e.clientY<rect.top || e.clientY>rect.bottom) return; // clicked outside grid
           const pos=this.worldToCell(e.clientX,e.clientY);
           if(pos.cx<0||pos.cy<0) return;
-          const afford = this.canAfford(this.placingDef.cost);
-          const placeable = this.canPlaceShape(this.placingDef.shape,pos.cx,pos.cy);
-          console.debug('click-to-place check', {name:this.placingDef.name, pos, afford, placeable});
-          this.logAction(`Click placement attempt: ${this.placingDef.name} at ${pos.cx},${pos.cy} afford:${afford} placeable:${placeable}`);
-          if(afford && placeable){
-            this.spend(this.placingDef.cost);
-            this.placeBuilding(this.placingDef,pos.cx,pos.cy);
-            this.logAction(`Построено ${this.placingDef.name} (click-to-place)`);
-            this.clearPlacementMode();
-          } else {
-            // show a small hint instead of alert to avoid breaking event flow
-            this.logAction('Невозможно построить здесь или недостаточно ресурсов (click-to-place)');
-          }
+          // use attemptPlacementAt for atomic check + place
+          const res = this.attemptPlacementAt(pos.cx,pos.cy);
+          this.logAction(`Click placement attempt: ${this.placingDef.name} at ${pos.cx},${pos.cy} result:${res.ok} reason:${res.reason||'ok'}`);
+          if(res.ok){ this.logAction(`Построено ${this.placingDef.name} (click-to-place)`); this.clearPlacementMode(); }
+          else { this.logAction('Невозможно построить здесь или недостаточно ресурсов (click-to-place)'); }
         }catch(err){ console.warn('click-to-place failed', err) }
       }, true);
   if(this.saveBtn) this.saveBtn.addEventListener('click', ()=>this.save()); else console.warn('attachEvents: missing saveBtn');
